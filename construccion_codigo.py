@@ -12,7 +12,7 @@ import random
 
 """
 Estructura código UKeeloq
-AUTH KEY: 16 bytes (lesser -> most significant bytes)
+AUTH KEY: 16 Bytes (lesser -> most significant Bytes)
 
 FIJO (32b)
 32b - Serial Number: 	Número de serie que comparten cerradura y llave
@@ -26,6 +26,8 @@ HOPPING CODE (128b)
 16b - Resync counter:	Cuenta el número de veces que el mando ha estado sin energía, por lo que el TS no va a estar sincronizado
 AUTHENTICATION (32b)
 32b - Authorization code: Genera un cifrado AES del resto del código (fijo y hopping) y trunca los primeros 32 bits (lesser)
+
+En total son 
 """
 
 time_res = 250 #Resolución de tiempo de 250ms
@@ -38,36 +40,47 @@ signals_sent = 0
 FIXED
 """
 #Serial
-serial_number = (1234567890).to_bytes(32, byteorder='big')
+serial_number = 123456789
+serial_number_len = 32
+serial_number_b = format(serial_number, f'0{serial_number_len}b')
 
 """
 HOPPING
 """
 #Delta time
 delta_time = 0
+delta_time_len = 24
+delta_time_b = format(delta_time, f'0{delta_time_len}b')
 
 #Sync counter
 #TODO contar las veces que se envían mensajes
-sync_counter= (0).to_bytes(24, byteorder='big')
+sync_counter = 0
+sync_counter_len = 24
+sync_counter_b = format(sync_counter, f'0{sync_counter_len}b')
 
 #Battery
 bat_percent = 100
 low_bat_flag = 0
 
 #Button timer
-button_timer = (0).to_bytes(16, byteorder='big')
+button_timer = 0
+button_timer_len = 16
+button_timer_b = format(button_timer, f'0{button_timer_len}b')
 
 #Resync counter
-resync_counter = (0).to_bytes(16, byteorder='big')
+resync_counter = 0
+resync_counter_len = 16
+resync_counter_b = format(resync_counter, f'0{resync_counter_len}b')
 
 """
 AUTHENTICATION
 """
 #Authentication code
-auth_code = (0).to_bytes(32, byteorder='big')
+auth_code = 0
+auth_code_len = 32
+auth_code_b = format(auth_code, f'0{auth_code_len}b')
 
 
-#TODO pasar los bytes a little endian si tal
 def on_key_press(event):
     if event.name == '1' or event.name == '2' or event.name == '3' or event.name == '4':
         print("Function", event.name, "sent")
@@ -77,18 +90,27 @@ def on_key_press(event):
         
         #Function code
         if event.name=='1':
-            function_code = b'\x00\x01'
+            function_code = 1
         elif event.name == '2':
-            function_code = b'\x00\x10'
+            function_code = 2
         elif event.name == '3':
-            function_code = b'\x01\x00'
+            function_code = 4
         elif event.name == '4':
-            function_code = b'\x10\x00'
+            function_code = 8
                 
+        function_code_len = 8
+        function_code_b = format(function_code, f'0{function_code_len}b')
         
         #Battery
-        #Se concatena el flag de batería baja con el % de batería
-        battery = low_bat_flag.to_bytes(1, byteorder='big') + bat_percent.to_bytes(7, byteorder='big')
+        #Se concatena el flag de batería baja con el % de batería  
+        low_bat_flag_len = 1
+        low_bat_flag_b = format(low_bat_flag, f'0{low_bat_flag_len}b')
+        
+        bat_percent_len = 7
+        bat_percent_b = format(bat_percent, f'0{bat_percent_len}b')
+        
+        battery_b = low_bat_flag_b + bat_percent_b        
+        
         
         #Para la generación de pulsaciones del botón, se va a generar un número aleatorio entre 50 y 1000ms
         #Luego se multiplica por la resolución de tiempo de pulsación
@@ -96,46 +118,51 @@ def on_key_press(event):
         
         # Redondear hacia abajo en múltiplos de 0.050
         random_press_time_rounded = int(random_press_time / 50) * 50
-        #TODO La longitud de almacenamiento de los bytes parece variar de unas pulsaciones a otras
-        button_timer = (random_press_time_rounded).to_bytes(16, byteorder='big') 
+        #TODO La longitud de almacenamiento de los bytes parece variar de unas pulsaciones a otras        
+        button_timer = random_press_time_rounded
+        button_timer_len = 16
+        button_timer_b = format(button_timer, f'0{button_timer_len}b')
 
-        
+        #TODO no se si está bien esta parte del código
         #Low speed timestamp
         global time_res
         timestamp = int(time.time() * 1000) #Se recogen los milis
         timestamp_rounded = (timestamp // time_res) * time_res  #Se pasa por la resolución de 250ms
-        low_speed_ts = struct.pack('d', timestamp_rounded) #Se almacena como bytes
+        #low_speed_ts = struct.pack('d', timestamp_rounded) #Se almacena como bytes #SON BITS!!!
+        low_speed_ts_len = 32
+        low_speed_ts_b = format(timestamp_rounded, f'0{low_speed_ts_len}b')
         
         
         #Delta time        
         global last_sent_sgn_ts_rounded
         delta_time = timestamp_rounded - last_sent_sgn_ts_rounded #Se calcula la diferencia en milis desde la última pulsación
         last_sent_sgn_ts_rounded = timestamp_rounded #Se actualiza la última pulsación
-        delta_time = struct.pack('d', delta_time) #Se empaqueta como bytes
+        #delta_time = struct.pack('d', delta_time) #Se empaqueta como bytes #SON BITS!!!
+        delta_time_b = format(delta_time, f'0{delta_time_len}b')
         
         #Prints
-        global sync_counter 
-        print("Serial number:" + str(serial_number))
-        print("Delta time:" + str(delta_time))
-        print("Sync counter:" + str(sync_counter))
-        print("Battery:" + str(battery))
-        print("Function code:" + str(function_code))
-        print("Low speed timestamp:" + str(low_speed_ts))
-        print("Button timer:" + str(button_timer))
-        print("Resync counter:" + str(resync_counter))
-        print("Authorization code:" + str(auth_code))
+        global sync_counter_b 
+        print("Serial number:" + serial_number_b)
+        print("Delta time:" + delta_time_b)
+        print("Sync counter:" + sync_counter_b)
+        print("Battery:" + battery_b)
+        print("Function code:" + function_code_b)
+        print("Low speed timestamp:" + low_speed_ts_b)
+        print("Button timer:" + button_timer_b)
+        print("Resync counter:" + resync_counter_b)
+        print("Authorization code:" + auth_code_b)
         
         
         #FINAL HOPPING CODE
-        hopping_code = (serial_number + 
-                        delta_time + 
-                        sync_counter + 
-                        battery + 
-                        function_code + 
-                        low_speed_ts + 
-                        button_timer +
-                        resync_counter + 
-                        auth_code )
+        hopping_code = (serial_number_b + 
+                        delta_time_b + 
+                        sync_counter_b + 
+                        battery_b + 
+                        function_code_b + 
+                        low_speed_ts_b + 
+                        button_timer_b +
+                        resync_counter_b + 
+                        auth_code_b )
         print(hopping_code)
         
         """
@@ -149,7 +176,7 @@ def on_key_press(event):
       
         global signals_sent 
         signals_sent = signals_sent + 1
-        sync_counter= (signals_sent).to_bytes(24, byteorder='big')
+        sync_counter_b = format(signals_sent, f'0{sync_counter_len}b')
         
     elif event.name == 'q':
         global should_break
