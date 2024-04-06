@@ -32,7 +32,7 @@ En total son
 
 time_res = 250 #Resolución de tiempo de 250ms
 btn_res = 50
-last_sent_sgn_ts_rounded = 0
+last_sent_sgn_ts = 0
 signals_sent = 0
 
 
@@ -51,6 +51,8 @@ HOPPING
 delta_time = 0
 delta_time_len = 24
 delta_time_b = format(delta_time, f'0{delta_time_len}b')
+
+last_sent_sgn_ts = 0
 
 #Sync counter
 #TODO contar las veces que se envían mensajes
@@ -123,21 +125,19 @@ def on_key_press(event):
         button_timer_len = 16
         button_timer_b = format(button_timer, f'0{button_timer_len}b')
 
-        #TODO no se si está bien esta parte del código
         #Low speed timestamp
         global time_res
-        timestamp = int(time.time() * 1000) #Se recogen los milis
-        timestamp_rounded = (timestamp // time_res) * time_res  #Se pasa por la resolución de 250ms
-        #low_speed_ts = struct.pack('d', timestamp_rounded) #Se almacena como bytes #SON BITS!!!
+        
+        seconds, millis = divmod(time.time(),1)
+        timestamp = int(seconds)        
         low_speed_ts_len = 32
-        low_speed_ts_b = format(timestamp_rounded, f'0{low_speed_ts_len}b')
+        low_speed_ts_b = format(timestamp, f'0{low_speed_ts_len}b')
         
         
         #Delta time        
-        global last_sent_sgn_ts_rounded
-        delta_time = timestamp_rounded - last_sent_sgn_ts_rounded #Se calcula la diferencia en milis desde la última pulsación
-        last_sent_sgn_ts_rounded = timestamp_rounded #Se actualiza la última pulsación
-        #delta_time = struct.pack('d', delta_time) #Se empaqueta como bytes #SON BITS!!!
+        global last_sent_sgn_ts
+        delta_time = timestamp - last_sent_sgn_ts #Se calcula la diferencia en milis desde la última pulsación
+        last_sent_sgn_ts = timestamp #Se actualiza la última pulsación
         delta_time_b = format(delta_time, f'0{delta_time_len}b')
         
         #Prints
