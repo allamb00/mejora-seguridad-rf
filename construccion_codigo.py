@@ -5,10 +5,12 @@ Created on Mon Jul  3 10:13:02 2023
 @author: allam
 """
 
-import struct
 import time
 import keyboard
 import random
+
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
 
 """
 Estructura código UKeeloq
@@ -20,8 +22,8 @@ HOPPING CODE (128b)
 24b - Delta time:	Segundos que han pasado desde la última pulsación
 24b - Sync counter: 	Cuenta el número de pulsaciones de botones
  8b - Battery: 		Nivel de carga de la batería. 7 bits de % y 1 bit con flag de batería baja
- 8b - Function code: 	Cuatro posiciones para la función que se envía
-32b - Low speed timestamp: Timestamp. Se realiza con un oscilador externo de 31.768kHz. Resolución de 250ms
+ 4b - Function code: 	Cuatro posiciones para la función que se envía
+32b - Low speed timestamp: Timestamp. Se realiza con un oscilador externo de 31.768kHz. Resolución de 250ms. RESOLUCION DE SEGUNDOS
 16b - Button timer: 	Cuenta la duración de la pulsación del botón actual. Se resetea en cada pulsación. Resolución de 50ms. (264ms = 5)
 16b - Resync counter:	Cuenta el número de veces que el mando ha estado sin energía, por lo que el TS no va a estar sincronizado
 AUTHENTICATION (32b)
@@ -47,6 +49,8 @@ serial_number_b = format(serial_number, f'0{serial_number_len}b')
 """
 HOPPING
 """
+hopping_code_len = 124
+
 #Delta time
 delta_time = 0
 delta_time_len = 24
@@ -100,7 +104,7 @@ def on_key_press(event):
         elif event.name == '4':
             function_code = 8
                 
-        function_code_len = 8
+        function_code_len = 4
         function_code_b = format(function_code, f'0{function_code_len}b')
         
         #Battery
@@ -111,8 +115,7 @@ def on_key_press(event):
         bat_percent_len = 7
         bat_percent_b = format(bat_percent, f'0{bat_percent_len}b')
         
-        battery_b = low_bat_flag_b + bat_percent_b        
-        
+        battery_b = low_bat_flag_b + bat_percent_b                
         
         #Para la generación de pulsaciones del botón, se va a generar un número aleatorio entre 50 y 1000ms
         #Luego se multiplica por la resolución de tiempo de pulsación
@@ -136,39 +139,61 @@ def on_key_press(event):
         
         #Delta time        
         global last_sent_sgn_ts
-        delta_time = timestamp - last_sent_sgn_ts #Se calcula la diferencia en milis desde la última pulsación
+        delta_time = timestamp - last_sent_sgn_ts #Se calcula la diferencia en segundos desde la última pulsación
         last_sent_sgn_ts = timestamp #Se actualiza la última pulsación
-        delta_time_b = format(delta_time, f'0{delta_time_len}b')
+        delta_time_b = format(min(delta_time, 16777215), f'0{delta_time_len}b') #Recoge la diferencia entre timestamps o el valor máximo del campo en caso de superarlo
         
         #Prints
         global sync_counter_b 
-        print("Serial number:" + serial_number_b)
-        print("Delta time:" + delta_time_b)
-        print("Sync counter:" + sync_counter_b)
-        print("Battery:" + battery_b)
-        print("Function code:" + function_code_b)
-        print("Low speed timestamp:" + low_speed_ts_b)
-        print("Button timer:" + button_timer_b)
-        print("Resync counter:" + resync_counter_b)
-        print("Authorization code:" + auth_code_b)
+        print("Serial number: " + serial_number_b)
+        print("Delta time: " + delta_time_b)
+        print("Sync counter: " + sync_counter_b)
+        print("Battery: " + battery_b)
+        print("Function code: " + function_code_b)
+        print("Low speed timestamp: " + low_speed_ts_b)
+        print("Button timer: " + button_timer_b)
+        print("Resync counter: " + resync_counter_b)
+        print("Authorization code: " + auth_code_b)
         
         
         #FINAL HOPPING CODE
-        hopping_code = (serial_number_b + 
-                        delta_time_b + 
+        plain_hopping_code = (delta_time_b + 
                         sync_counter_b + 
                         battery_b + 
                         function_code_b + 
                         low_speed_ts_b + 
                         button_timer_b +
-                        resync_counter_b + 
-                        auth_code_b )
-        print(hopping_code)
+                        resync_counter_b)
+        print("\n" + plain_hopping_code + "\n")
         
+        """
+        CIPHER
+        """      
+        key_gen = low_speed_ts_b
+        key_len = 124        
+        key = ""        
+        while len(key) < key_len:
+            key += key_gen
+        
+        key = key[:key_len]
+        
+        print("\n Key: " + key)
+        
+        hopping_code = format(int(plain_hopping_code, 2)^int(key,2), f'0{hopping_code_len}b')
+        print ("\n Hopping code: " + hopping_code)
+        
+        rolling_code = (serial_number_b + hopping_code + auth_code_b)
+        
+        print ("\n FINAL ROLLING CODE: " + rolling_code)
+        
+        """
+        DECIPHER
+        """        
+
+
         """
         SEND SIGNAL
         """
-        
         
         
         
