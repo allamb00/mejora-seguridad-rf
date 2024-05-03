@@ -9,8 +9,8 @@ import time
 import keyboard
 import random
 
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
+from rtlsdr import *
+import matplotlib as plt
 
 """
 Estructura código UKeeloq
@@ -195,8 +195,28 @@ def on_key_press(event):
         SEND SIGNAL
         """
         
+        sdr = RtlSdr()
         
+        sdr.sample_rat = 2.048e6
+        sample_rate=sdr.sample_rate
+        sdr.center_freq = 433e6
+        center_freq=sdr.center_freq
+        sdr.gain = 'auto'
         
+        plt.close()
+        NumberOfSamples = sample_rate/1
+        
+        samples = sdr.read_samples(NumberOfSamples)
+        sdr.close()
+        
+        #print
+        
+        plt.psd(samples, Fs = sample_rate / 1e6, Fc = center_freq / 1e6)
+        plt.xlabel('Frequency (Mhz)')
+        plt.ylabel('Relative power (dB)')
+        
+        del samples
+        plt.show()        
         
       
         global signals_sent 
