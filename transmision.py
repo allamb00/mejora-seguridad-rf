@@ -23,6 +23,7 @@ from PyQt5 import Qt
 from argparse import ArgumentParser
 from gnuradio.eng_arg import eng_float, intx
 from gnuradio import eng_notation
+from gnuradio import network
 import osmosdr
 import time
 import sip
@@ -177,7 +178,7 @@ class Transmission(gr.top_block, Qt.QWidget):
 
         self.top_layout.addWidget(self._qtgui_sink_x_0_0_win)
         self.osmosdr_sink_0 = osmosdr.sink(
-            args="numchan=" + str(1) + " " + ""
+            args="numchan=" + str(1) + " " + "hackrf=0"
         )
         self.osmosdr_sink_0.set_time_unknown_pps(osmosdr.time_spec_t())
         self.osmosdr_sink_0.set_sample_rate(samp_rate)
@@ -188,14 +189,12 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.osmosdr_sink_0.set_bb_gain(20, 0)
         self.osmosdr_sink_0.set_antenna('', 0)
         self.osmosdr_sink_0.set_bandwidth(0, 0)
-        self.blocks_vector_source_x_0 = blocks.vector_source_c((1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0), False, 1, [])
+        self.network_udp_sink_0 = network.udp_sink(gr.sizeof_short, 1, '127.0.0.1', 2000, 0, 1472, False)
+        self.blocks_vector_source_x_0 = blocks.vector_source_c((1, 0, 0 , 1, 0, 1), True, 1, [])
         self.blocks_throttle2_0 = blocks.throttle( gr.sizeof_gr_complex*1, samp_rate, True, 0 if "auto" == "auto" else max( int(float(0.1) * samp_rate) if "auto" == "time" else int(0.1), 1) )
         self.blocks_threshold_ff_0 = blocks.threshold_ff(0.025, 0.075, 0)
         self.blocks_repeat_0 = blocks.repeat(gr.sizeof_gr_complex*1, 600)
-        self.blocks_probe_signal_vx_0 = blocks.probe_signal_vb(1)
-        self.blocks_float_to_uchar_0 = blocks.float_to_uchar(1, 1, 0)
-        self.blocks_file_sink_1 = blocks.file_sink(gr.sizeof_char*1, 'received_uchar.bin', False)
-        self.blocks_file_sink_1.set_unbuffered(False)
+        self.blocks_float_to_short_0 = blocks.float_to_short(1, 1)
         self.blocks_add_const_vxx_0 = blocks.add_const_ff(0.5)
         self.analog_am_demod_cf_0 = analog.am_demod_cf(
         	channel_rate=samp_rate,
@@ -210,11 +209,10 @@ class Transmission(gr.top_block, Qt.QWidget):
         ##################################################
         self.connect((self.analog_am_demod_cf_0, 0), (self.rational_resampler_xxx_0, 0))
         self.connect((self.blocks_add_const_vxx_0, 0), (self.blocks_threshold_ff_0, 0))
-        self.connect((self.blocks_float_to_uchar_0, 0), (self.blocks_file_sink_1, 0))
-        self.connect((self.blocks_float_to_uchar_0, 0), (self.blocks_probe_signal_vx_0, 0))
+        self.connect((self.blocks_float_to_short_0, 0), (self.network_udp_sink_0, 0))
         self.connect((self.blocks_repeat_0, 0), (self.osmosdr_sink_0, 0))
         self.connect((self.blocks_repeat_0, 0), (self.qtgui_sink_x_0_0, 0))
-        self.connect((self.blocks_threshold_ff_0, 0), (self.blocks_float_to_uchar_0, 0))
+        self.connect((self.blocks_threshold_ff_0, 0), (self.blocks_float_to_short_0, 0))
         self.connect((self.blocks_threshold_ff_0, 0), (self.qtgui_time_sink_x_0_0_0_0, 0))
         self.connect((self.blocks_throttle2_0, 0), (self.analog_am_demod_cf_0, 0))
         self.connect((self.blocks_throttle2_0, 0), (self.qtgui_sink_x_0_0_0, 0))
