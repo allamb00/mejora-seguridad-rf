@@ -9,9 +9,6 @@ import time
 import keyboard
 import random
 
-from rtlsdr import *
-import matplotlib as plt
-
 """
 Estructura código UKeeloq
 AUTH KEY: 16 Bytes (lesser -> most significant Bytes)
@@ -29,7 +26,6 @@ HOPPING CODE (128b)
 AUTHENTICATION (32b)
 32b - Authorization code: Genera un cifrado AES del resto del código (fijo y hopping) y trunca los primeros 32 bits (lesser)
 
-En total son 
 """
 
 time_res = 250 #Resolución de tiempo de 250ms
@@ -169,56 +165,12 @@ def on_key_press(event):
         """
         CIPHER
         """      
-        key_gen = low_speed_ts_b
-        key_len = 124        
-        key = ""        
-        while len(key) < key_len:
-            key += key_gen
-        
-        key = key[:key_len]
-        
-        print("\n Key: " + key)
-        
-        hopping_code = format(int(plain_hopping_code, 2)^int(key,2), f'0{hopping_code_len}b')
-        print ("\n Hopping code: " + hopping_code)
-        
-        rolling_code = (serial_number_b + hopping_code + auth_code_b)
-        
-        print ("\n FINAL ROLLING CODE: " + rolling_code)
         
         """
         DECIPHER
         """        
 
-
-        """
-        SEND SIGNAL
-        """
-        
-        sdr = RtlSdr()
-        
-        sdr.sample_rat = 2.048e6
-        sample_rate=sdr.sample_rate
-        sdr.center_freq = 433e6
-        center_freq=sdr.center_freq
-        sdr.gain = 'auto'
-        
-        plt.close()
-        NumberOfSamples = sample_rate/1
-        
-        samples = sdr.read_samples(NumberOfSamples)
-        sdr.close()
-        
-        #print
-        
-        plt.psd(samples, Fs = sample_rate / 1e6, Fc = center_freq / 1e6)
-        plt.xlabel('Frequency (Mhz)')
-        plt.ylabel('Relative power (dB)')
-        
-        del samples
-        plt.show()        
-        
-      
+     
         global signals_sent 
         signals_sent = signals_sent + 1
         sync_counter_b = format(signals_sent, f'0{sync_counter_len}b')
@@ -237,16 +189,3 @@ while not should_break:
 
 print("Ejecución finalizada")
 
-
-
-""" Proceso inverso para resolver el timestamp en bytes
-bytes_timestamp = b'\x40\x09\x21\xfb\x4d\x2b\x5f\x09'  # Ejemplo de secuencia de bytes
-
-# Desempaquetar los bytes en un flotante de doble precisión
-timestamp_flotante = struct.unpack('d', bytes_timestamp)[0]
-
-# Obtener el timestamp utilizando time.mktime()
-timestamp = time.mktime(time.gmtime()) + (timestamp_flotante - time.time())
-
-print(timestamp)
-"""
