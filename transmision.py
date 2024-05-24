@@ -28,8 +28,29 @@ import keyboard
 import random
 import matplotlib as plt
 
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
 
-final_code = 0
+
+
+
+# Definición de la función para convertir varios tipos de valores a bits
+def to_bits(value, length=None):
+    if not isinstance(value, int):
+        raise TypeError("El valor debe ser un entero")
+    
+    # Convertir el entero a su representación en bits
+    bits = format(value, 'b')
+    
+    # Completar con ceros a la izquierda
+    if length is not None:
+        if length < len(bits):
+            raise ValueError("La longitud especificada es menor que la longitud de bits del valor")
+        bits = bits.zfill(length)
+    
+    return bits
 
 """
 Estructura código UKeeloq
@@ -37,7 +58,7 @@ AUTH KEY: 16 Bytes (lesser -> most significant Bytes)
 
 FIJO (32b)
 32b - Serial Number: 	Número de serie que comparten cerradura y llave
-HOPPING CODE (128b)
+HOPPING CODE (124b)
 24b - Delta time:	Segundos que han pasado desde la última pulsación
 24b - Sync counter: 	Cuenta el número de pulsaciones de botones
  8b - Battery: 		Nivel de carga de la batería. 7 bits de % y 1 bit con flag de batería baja
@@ -46,7 +67,7 @@ HOPPING CODE (128b)
 16b - Button timer: 	Cuenta la duración de la pulsación del botón actual. Se resetea en cada pulsación. Resolución de 50ms. (264ms = 5)
 16b - Resync counter:	Cuenta el número de veces que el mando ha estado sin energía, por lo que el TS no va a estar sincronizado
 AUTHENTICATION (32b)
-32b - Authorization code: Genera un cifrado AES del resto del código (fijo y hopping) y trunca los primeros 32 bits (lesser)
+32b - Authorization code: Genera un 'cifrado' AES del resto del código (fijo y hopping) y trunca los primeros 32 bits (lesser)
 
 """
 
@@ -62,7 +83,7 @@ FIXED
 #Serial
 serial_number = 123456789
 serial_number_len = 32
-serial_number_b = format(serial_number, f'0{serial_number_len}b')
+serial_number_b = to_bits(serial_number, serial_number_len)
 
 """
 HOPPING
@@ -72,7 +93,7 @@ hopping_code_len = 124
 #Delta time
 delta_time = 0
 delta_time_len = 24
-delta_time_b = format(delta_time, f'0{delta_time_len}b')
+delta_time_b = to_bits(delta_time, delta_time_len)
 
 last_sent_sgn_ts = 0
 
@@ -80,7 +101,7 @@ last_sent_sgn_ts = 0
 #TODO contar las veces que se envían mensajes
 sync_counter = 0
 sync_counter_len = 24
-sync_counter_b = format(sync_counter, f'0{sync_counter_len}b')
+sync_counter_b = to_bits(sync_counter, sync_counter_len)
 
 #Battery
 bat_percent = 100
@@ -89,12 +110,12 @@ low_bat_flag = 0
 #Button timer
 button_timer = 0
 button_timer_len = 16
-button_timer_b = format(button_timer, f'0{button_timer_len}b')
+button_timer_b = to_bits(button_timer, button_timer_len)
 
 #Resync counter
 resync_counter = 0
 resync_counter_len = 16
-resync_counter_b = format(resync_counter, f'0{resync_counter_len}b')
+resync_counter_b = to_bits(resync_counter, resync_counter_len)
 
 """
 AUTHENTICATION
@@ -102,9 +123,16 @@ AUTHENTICATION
 #Authentication code
 auth_code = 0
 auth_code_len = 32
-auth_code_b = format(auth_code, f'0{auth_code_len}b')
+auth_code_b = to_bits(auth_code, auth_code_len)
 
-
+"""
+CYPHER
+"""
+# Definir clave y IV fijos
+key = b'0123456789abcdef0123456789abcdef'  # 32 bytes para AES-256
+iv = b'0123456789abcdef'  # 16 bytes para el IV
+#Vector del rolling code para poder ser enviado
+rolling_code_v = 0
 
 class Transmission(gr.top_block, Qt.QWidget):
 
@@ -262,7 +290,7 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.osmosdr_sink_0.set_antenna('', 0)
         self.osmosdr_sink_0.set_bandwidth(0, 0)
         self.network_udp_sink_0 = network.udp_sink(gr.sizeof_short, 1, '127.0.0.1', 2000, 0, 1472, False)
-        self.blocks_vector_source_x_0 = blocks.vector_source_c(final_code, False, 1, [])
+        self.blocks_vector_source_x_0 = blocks.vector_source_c(rolling_code_v, False, 1, [])
         self.blocks_throttle2_0 = blocks.throttle( gr.sizeof_gr_complex*1, samp_rate, True, 0 if "auto" == "auto" else max( int(float(0.1) * samp_rate) if "auto" == "time" else int(0.1), 1) )
         self.blocks_threshold_ff_0 = blocks.threshold_ff(0.025, 0.075, 0)
         self.blocks_repeat_0 = blocks.repeat(gr.sizeof_gr_complex*1, 600)
@@ -328,8 +356,54 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.qtgui_sink_x_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.qtgui_sink_x_0_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.rtlsdr_source_0.set_center_freq(self.center_freq, 0)
+        
 
+# Función para cifrar
+def encrypt(plain_bits, key):
+    # Verificar que la longitud del texto plano sea exactamente 124 bits
+    if len(plain_bits) != 124:
+        raise ValueError(f"La longitud del texto plano debe ser exactamente 124 bits ({len(plain_bits)})")
 
+    # Convertir la cadena de bits en una cadena de bytes
+    plain_bytes = bytes(int(plain_bits[i:i+8], 2) for i in range(0, len(plain_bits), 8))
+
+    # Crear un objeto de cifrado
+    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+
+    # Cifrar el texto plano
+    encryptor = cipher.encryptor()
+    cipher_bytes = encryptor.update(plain_bytes) + encryptor.finalize()
+
+    # Convertir los bytes cifrados a bits
+    cipher_bits = ''.join(format(byte, '08b') for byte in cipher_bytes)
+
+    # Eliminar los ceros no significativos
+    cipher_bits = cipher_bits[:124]
+
+    return cipher_bits
+
+def crc(plain_bits):
+    # Verificar que la longitud del texto plano sea exactamente 156 bits
+    if len(plain_bits) != 156:
+        raise ValueError(f"La longitud del texto plano debe ser exactamente 156 bits ({len(plain_bits)})")
+
+    # Convertir la cadena de bits en una cadena de bytes
+    plain_bytes = bytes(int(plain_bits[i:i+8], 2) for i in range(0, len(plain_bits), 8))
+
+    # Calcular el resumen criptográfico (hash) utilizando SHA-256
+    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+    digest.update(plain_bytes)
+    hash_result = digest.finalize()
+
+    # Convertir los bytes del hash a bits
+    hash_bits = ''.join(format(byte, '08b') for byte in hash_result)
+
+    # Tomar los primeros 32 bits del resultado del hash como el CRC
+    crc_bits = hash_bits[:32]
+
+    return crc_bits
+
+#Función para construir el código del envío
 def build_code(func):
     if func == '1' or func == '2' or func == '3' or func == '4':
         print("Function", func, "sent")
@@ -347,15 +421,15 @@ def build_code(func):
             function_code = 8
                 
         function_code_len = 4
-        function_code_b = format(function_code, f'0{function_code_len}b')
+        function_code_b = to_bits(function_code, function_code_len)
         
         #Battery
         #Se concatena el flag de batería baja con el % de batería  
         low_bat_flag_len = 1
-        low_bat_flag_b = format(low_bat_flag, f'0{low_bat_flag_len}b')
+        low_bat_flag_b = to_bits(low_bat_flag, low_bat_flag_len)
         
         bat_percent_len = 7
-        bat_percent_b = format(bat_percent, f'0{bat_percent_len}b')
+        bat_percent_b = to_bits(bat_percent, bat_percent_len)
         
         battery_b = low_bat_flag_b + bat_percent_b                
         
@@ -368,7 +442,7 @@ def build_code(func):
         #TODO La longitud de almacenamiento de los bytes parece variar de unas pulsaciones a otras        
         button_timer = random_press_time_rounded
         button_timer_len = 16
-        button_timer_b = format(button_timer, f'0{button_timer_len}b')
+        button_timer_b = to_bits(button_timer, button_timer_len)
 
         #Low speed timestamp
         global time_res
@@ -376,76 +450,56 @@ def build_code(func):
         seconds, millis = divmod(time.time(),1)
         timestamp = int(seconds)        
         low_speed_ts_len = 32
-        low_speed_ts_b = format(timestamp, f'0{low_speed_ts_len}b')
+        low_speed_ts_b = to_bits(timestamp, low_speed_ts_len)
         
         
         #Delta time        
         global last_sent_sgn_ts
         delta_time = timestamp - last_sent_sgn_ts #Se calcula la diferencia en segundos desde la última pulsación
         last_sent_sgn_ts = timestamp #Se actualiza la última pulsación
-        delta_time_b = format(min(delta_time, 16777215), f'0{delta_time_len}b') #Recoge la diferencia entre timestamps o el valor máximo del campo en caso de superarlo
+        delta_time_b = to_bits(min(delta_time, 16777215), delta_time_len) #Recoge la diferencia entre timestamps o el valor máximo del campo en caso de superarlo
         
-        #Prints
-        global sync_counter_b 
-        print("Serial number: " + serial_number_b)
-        print("Delta time: " + delta_time_b)
-        print("Sync counter: " + sync_counter_b)
-        print("Battery: " + battery_b)
-        print("Function code: " + function_code_b)
-        print("Low speed timestamp: " + low_speed_ts_b)
-        print("Button timer: " + button_timer_b)
-        print("Resync counter: " + resync_counter_b)
-        print("Authorization code: " + auth_code_b)
                 
         #FINAL HOPPING CODE
-        plain_hopping_code = (serial_number_b + 
-                        delta_time_b + 
+        global sync_counter_b 
+        plain_hopping_code = (delta_time_b + 
                         sync_counter_b + 
                         battery_b + 
                         function_code_b + 
                         low_speed_ts_b + 
                         button_timer_b +
-                        resync_counter_b +
-                        auth_code_b)
+                        resync_counter_b)
         
-        print("\n" + plain_hopping_code + "\n")
+        hopping_code = encrypt(plain_hopping_code, key)
+        
+        #Verificación CRC
+        auth_code_b = crc(serial_number_b + hopping_code)
+        
+        #Prints
+        print(f"\nSerial number({len(serial_number_b)}b): {serial_number_b}")
+        print(f"Delta time({len(delta_time_b)}b): {delta_time_b}")
+        print(f"Sync counter({len(sync_counter_b)}b): {sync_counter_b}")
+        print(f"Battery({len(battery_b)}b): {battery_b}")
+        print(f"Function code({len(function_code_b)}b): {function_code_b}")
+        print(f"Low speed timestamp({len(low_speed_ts_b)}b): {low_speed_ts_b}")
+        print(f"Button timer({len(button_timer_b)}b): {button_timer_b}")
+        print(f"Resync counter({len(resync_counter_b)}b): {resync_counter_b}")
+        print(f"Authorization code({len(auth_code_b)}b): {auth_code_b}")
         
         """
         CIPHER
-        """      
-        # key_gen = low_speed_ts_b
-        # key_len = 124        
-        # key = ""        
-        # while len(key) < key_len:
-        #     key += key_gen
+        """              
+        # Construir el rolling code
+        rolling_code = (serial_number_b + hopping_code + auth_code_b)
+        print(f"\nTexto cifrado ({len(rolling_code)}b): {rolling_code}")   
         
-        # key = key[:key_len]
-        
-        # print("\n Key: " + key)
-        
-        # hopping_code = format(int(plain_hopping_code, 2)^int(key,2), f'0{hopping_code_len}b')
-        # print ("\n Hopping code: " + hopping_code)
-        
-        # rolling_code = (serial_number_b + hopping_code + auth_code_b)
-        
-        # print ("\n FINAL ROLLING CODE: " + rolling_code)
-        #SENDING
-        
-        #TODO cifrado simétrico del codigo
-        
-
-        
-        
-        final_code_b = plain_hopping_code
-        
-        global final_code
-        final_code = [int(bit) for bit in final_code_b]
-        print("Array de números:", final_code)        
-        
+        # Transformar el código en un array para poder ser enviado
+        global rolling_code_v
+        rolling_code_v = [int(bit) for bit in rolling_code]         
       
         global signals_sent 
         signals_sent = signals_sent + 1
-        sync_counter_b = format(signals_sent, f'0{sync_counter_len}b')    
+        sync_counter_b = to_bits(signals_sent, sync_counter_len)    
 
 
 
@@ -469,17 +523,12 @@ def main(options=None):
         
     signal.signal(signal.SIGINT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
-    # Crear un QTimer para parar el programa después de 3 segundos
+    # Crear un QTimer para parar el programa después de 2 segundos
     timer = Qt.QTimer()
     timer.timeout.connect(sig_handler)  # Llama a sig_handler después del timeout
-    timer.start(3000)  # 3000 ms = 3 segundos
-    
+    timer.start(2000)  
     
     qapp.exec_()
-    
-    # should_break = False
-    # while not should_break:
-    #     pass
 
 if __name__ == '__main__':
     main()

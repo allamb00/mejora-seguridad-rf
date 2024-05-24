@@ -9,6 +9,11 @@ import time
 import keyboard
 import random
 
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
+import os
+
 """
 Estructura código UKeeloq
 AUTH KEY: 16 Bytes (lesser -> most significant Bytes)
@@ -82,6 +87,19 @@ auth_code = 0
 auth_code_len = 32
 auth_code_b = format(auth_code, f'0{auth_code_len}b')
 
+# Función para cifrar
+def encrypt(plain_text, key, iv):
+    # Crear un objeto de cifrado
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+
+    # Agregar padding al texto plano
+    padder = padding.PKCS7(algorithms.AES.block_size).padder()
+    padded_data = padder.update(plain_text) + padder.finalize()
+
+    # Cifrar el texto plano
+    cipher_text = encryptor.update(padded_data) + encryptor.finalize()
+    return cipher_text
 
 def on_key_press(event):
     if event.name == '1' or event.name == '2' or event.name == '3' or event.name == '4':
@@ -166,10 +184,7 @@ def on_key_press(event):
         CIPHER
         """      
         
-        """
-        DECIPHER
-        """        
-
+        
      
         global signals_sent 
         signals_sent = signals_sent + 1
