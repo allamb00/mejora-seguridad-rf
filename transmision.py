@@ -27,6 +27,7 @@ import time
 import keyboard
 import random
 import matplotlib as plt
+import crcmod
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
@@ -385,24 +386,19 @@ def encrypt(plain_bits, key):
 
     return cipher_bits
 
-def crc(code_bits):
-    # Verificar que la longitud del texto plano sea exactamente 160 bits
-    if len(code_bits) != 160:
-        raise ValueError(f"La longitud del texto plano debe ser exactamente 160 bits ({len(code_bits)})")
 
-    # Convertir la cadena de bits en una cadena de bytes
-    code_bytes = bytes(int(code_bits[i:i+8], 2) for i in range(0, len(code_bits), 8))
+def calculate_crc(data, polynomial=0x104C11DB7, init_value=0):
+    # Convertir la cadena de bits en bytes
+    byte_data = int(data, 2).to_bytes((len(data) + 7) // 8, byteorder='big')
 
-    # Calcular el resumen criptográfico (hash) utilizando SHA-256
-    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-    digest.update(code_bytes)
-    hash_result = digest.finalize()
+    # Crear la función CRC utilizando crcmod
+    crc_func = crcmod.mkCrcFun(polynomial, initCrc=init_value, rev=False)
 
-    # Convertir los bytes del hash a bits
-    hash_bits = ''.join(format(byte, '08b') for byte in hash_result)
+    # Calcular el CRC
+    crc_value = crc_func(byte_data)
 
-    # Tomar los primeros 32 bits del resultado del hash como el CRC
-    crc_bits = hash_bits[:32]
+    # Convertir el CRC calculado a una cadena de bits de 32 bits
+    crc_bits = f'{crc_value:032b}'
 
     return crc_bits
 
@@ -477,7 +473,7 @@ def build_code(func):
         hopping_code = encrypt(plain_hopping_code, key)
         
         #Verificación CRC
-        auth_code_b = crc(serial_number_b + hopping_code)
+        auth_code_b = calculate_crc(serial_number_b + hopping_code)
         
         #Prints
         print(f"\nSerial number({len(serial_number_b)}b): {serial_number_b}")

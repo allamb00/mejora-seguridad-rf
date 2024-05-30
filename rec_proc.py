@@ -8,6 +8,7 @@ import socket
 import struct
 import keyboard
 import time
+import crcmod
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
@@ -102,11 +103,11 @@ def process_bits(bit_data):
 # Función que separa los segmentos del rolling code
 def split_code_segments(code):
     if len(code) != 192:
-        raise ValueError(f"La longitud del código no es de 188 caracteres ({len(code)})")
+        raise ValueError(f"La longitud del código no es de 192 caracteres ({len(code)})")
 
     fixed = code[:32]
-    hopping = code[32:160]
-    crc = code[160:]
+    hopping = code[32:32+128]
+    crc = code[32+128:32+128+32]
 
     return fixed, hopping, crc
 
@@ -147,24 +148,18 @@ def decrypt(cipher_bits, key):
 
     return decrypted_bits
 
-def crc(code_bits):
-    # Verificar que la longitud del texto plano sea exactamente 160 bits
-    if len(code_bits) != 160:
-        raise ValueError(f"La longitud del texto plano debe ser exactamente 160 bits ({len(code_bits)})")
+def calculate_crc(data, polynomial=0x104C11DB7, init_value=0):
+    # Convertir la cadena de bits en bytes
+    byte_data = int(data, 2).to_bytes((len(data) + 7) // 8, byteorder='big')
 
-    # Convertir la cadena de bits en una cadena de bytes
-    code_bytes = bytes(int(code_bits[i:i+8], 2) for i in range(0, len(code_bits), 8))
+    # Crear la función CRC utilizando crcmod
+    crc_func = crcmod.mkCrcFun(polynomial, initCrc=init_value, rev=False)
 
-    # Calcular el resumen criptográfico (hash) utilizando SHA-256
-    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-    digest.update(code_bytes)
-    hash_result = digest.finalize()
+    # Calcular el CRC
+    crc_value = crc_func(byte_data)
 
-    # Convertir los bytes del hash a bits
-    hash_bits = ''.join(format(byte, '08b') for byte in hash_result)
-
-    # Tomar los primeros 32 bits del resultado del hash como el CRC
-    crc_bits = hash_bits[:32]
+    # Convertir el CRC calculado a una cadena de bits de 32 bits
+    crc_bits = f'{crc_value:032b}'
 
     return crc_bits
 
@@ -204,7 +199,7 @@ def main():
                 
                 # Concatenar los bits y calcular el CRC
                 combined_code = fixed_code + hopping_code
-                computed_crc = crc(combined_code)
+                computed_crc = calculate_crc(combined_code)
                 
                 # Comparar con el CRC esperado
                 if computed_crc == crc_code:
