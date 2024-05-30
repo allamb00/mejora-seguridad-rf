@@ -9,6 +9,10 @@ import struct
 import keyboard
 import time
 import crcmod
+import hashlib
+
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
@@ -17,7 +21,6 @@ from cryptography.hazmat.backends import default_backend
 
 # Definir clave y IV fijos
 key = b'0123456789abcdef0123456789abcdef'  # 32 bytes para AES-256
-iv = b'0123456789abcdef'  # 16 bytes para el IV
 
 # Configura el socket UDP
 UDP_IP = "127.0.0.1"  # Dirección IP a la que GNU Radio está enviando los datos
@@ -38,6 +41,7 @@ count = 0 #Variable global para que no se corte la cuenta entre payloads
 preamble = '00000111010110111100110100010101' 
 preamble_len = len(preamble)
 code_len = 192 #Tamaño total del código
+sync_counter_local = 0
 
 #Configuración de la ventana de tiempo válida para la recepción
 window_seconds = 5
@@ -47,7 +51,23 @@ window_seconds = 5
 
 def is_all_zeros(bit_data):
     return all(bit == '0' for bit in bit_data)
-            
+           
+# Definición de la función para convertir varios tipos de valores a bits
+def to_bits(value, length=None):
+    if not isinstance(value, int):
+        raise TypeError("El valor debe ser un entero")
+    
+    # Convertir el entero a su representación en bits
+    bits = format(value, 'b')
+    
+    # Completar con ceros a la izquierda
+    if length is not None:
+        if length < len(bits):
+            raise ValueError("La longitud especificada es menor que la longitud de bits del valor")
+        bits = bits.zfill(length)
+    
+    return bits
+ 
 def replace_control_bytes(data):
     # Reemplaza \x00 por '0' y \x01 por '1'
     bits = data.replace(b'\x01\x00', b'1').replace(b'\x00\x00', b'0')
@@ -127,25 +147,55 @@ def split_hopping_code_segments(code):
 
     return delta_time, sync_counter, battery, function_code, low_sp_ts, btn_timer, resync_counter
 
-# Función para descifrar
-def decrypt(cipher_bits, key):
-    # Verificar que la longitud del texto cifrado sea exactamente 128 bits
+# Función para obtener la clave
+def derive_key(seed):
+    seed_bytes = seed.to_bytes(16, byteorder='big')  # Convierte la seed a bytes
+    hash_obj = hashlib.sha256(seed_bytes).digest()  # Deriva un hash SHA-256
+    key = hash_obj[:16]  # Toma los primeros 16 bytes para la clave AES-128
+    iv = hash_obj[16:32]  # Toma los siguientes 16 bytes para el IV
+    return key, iv
+
+# # Función para descifrar
+# def decrypt(cipher_bits, key):
+#     # Verificar que la longitud del texto cifrado sea exactamente 128 bits
+#     if len(cipher_bits) != 128:
+#         raise ValueError(f"La longitud del texto cifrado debe ser exactamente 128 bits ({cipher_bits})")
+
+#     # Convertir la cadena de bits cifrados en una cadena de bytes
+#     cipher_bytes = bytes(int(cipher_bits[i:i+8], 2) for i in range(0, len(cipher_bits), 8))
+
+#     # Crear un objeto de cifrado
+#     cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+
+#     # Descifrar el texto cifrado
+#     decryptor = cipher.decryptor()
+#     decrypted_bytes = decryptor.update(cipher_bytes) + decryptor.finalize()
+
+#     # Convertir los bytes descifrados a bits
+#     decrypted_bits = ''.join(format(byte, '08b') for byte in decrypted_bytes)
+
+#     return decrypted_bits
+
+def decrypt(cipher_bits, key, iv):
     if len(cipher_bits) != 128:
-        raise ValueError(f"La longitud del texto cifrado debe ser exactamente 128 bits ({cipher_bits})")
+        raise ValueError(f"La longitud del texto cifrado debe ser exactamente 128 bits ({len(cipher_bits)})")
 
-    # Convertir la cadena de bits cifrados en una cadena de bytes
-    cipher_bytes = bytes(int(cipher_bits[i:i+8], 2) for i in range(0, len(cipher_bits), 8))
+    if len(key) not in [16, 24, 32]:
+        raise ValueError(f"La clave debe tener una longitud de 16, 24 o 32 bytes ({len(key)})")
 
-    # Crear un objeto de cifrado
-    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+    # Se asegura de que el iv cumple los 16 bytes
+    iv_bytes = iv.to_bytes(16, byteorder='big')
+    cipher = AES.new(key, AES.MODE_CBC, iv_bytes)
 
-    # Descifrar el texto cifrado
-    decryptor = cipher.decryptor()
-    decrypted_bytes = decryptor.update(cipher_bytes) + decryptor.finalize()
+    # Convierte la cadena de bits cifrados a bytes
+    cipher_bytes = int(cipher_bits, 2).to_bytes(16, byteorder='big')
 
-    # Convertir los bytes descifrados a bits
-    decrypted_bits = ''.join(format(byte, '08b') for byte in decrypted_bytes)
+    # Descifra los datos
+    decrypted_data = cipher.decrypt(cipher_bytes)
 
+    # Convierte el texto descifrado a bits
+    decrypted_bits = ''.join(f'{byte:08b}' for byte in decrypted_data)
+    
     return decrypted_bits
 
 def calculate_crc(data, polynomial=0x104C11DB7, init_value=0):
@@ -175,6 +225,23 @@ def is_timestamp_valid(bin_timestamp):
         return True
     else:
         return False
+    
+    
+def is_sync_valid(sync_counter_keyfob_b, sync_counter = None):
+    # Convertir el sync counter a entero
+    sync_counter_keyfob = int(sync_counter_keyfob_b)
+    
+    # Si no se recibe un segundo argumento, se compara con el contador local
+    if sync_counter is None:
+        global sync_counter_local
+        sync_counter = sync_counter_local
+        
+    # Comparar el contador local con el del mando
+    if sync_counter_local == sync_counter_keyfob:
+        return True
+    else:
+        return False
+    
 
 
 def main():
@@ -191,6 +258,7 @@ def main():
             rolling_code = 0
             rolling_code = process_bits(reduced) # Busca el preámbulo en la entrada
             if rolling_code:
+                print(f"\nCodigo recibido ({len(rolling_code)}b): {rolling_code}\n")  
                 # Separar el código en parte fija, dinámica y CRC32
                 fixed_code, hopping_code, crc_code = split_code_segments(rolling_code)
                 print(f'Parte fija: {fixed_code}')
@@ -201,12 +269,20 @@ def main():
                 combined_code = fixed_code + hopping_code
                 computed_crc = calculate_crc(combined_code)
                 
+                # print("----------------AMOAVE SI RULA EL CRC------------------")
+                # print("rolling code: " + rolling_code[:160])
+                # print("combind.code: " + combined_code)
+                # print("-------------------------------------------------------")
+                
                 # Comparar con el CRC esperado
                 if computed_crc == crc_code:
                     print("CRC coincide. ", end='')
                     
-                    # Separamos la parte dinámica en cada uno de sus campos
-                    plain_hopping_code = decrypt(hopping_code, key)                    
+                    # Se descifra el código
+                    global sync_counter_local
+                    plain_hopping_code = decrypt(hopping_code, key, sync_counter_local) 
+                    
+                    # Se separa la parte dinámica en cada uno de sus campos
                     (delta_time, 
                     sync_counter, 
                     battery, 
@@ -216,21 +292,52 @@ def main():
                     resync_counter
                     ) = split_hopping_code_segments(plain_hopping_code)
                     
-                    if is_timestamp_valid(low_sp_ts) :
-                        
-                        print("TS coincide.")
-                        print("¡Código válido!\n")
-                        print(f"delta_time: {delta_time}")
-                        print(f"sync_counter: {sync_counter}")
-                        print(f"battery: {battery}")
-                        print(f"function_code: {function_code}")
-                        print(f"low_sp_ts: {low_sp_ts}")
-                        print(f"btn_timer: {btn_timer}")
-                        print(f"resync_counter: {resync_counter}")
-
-
+                    # Se comprueba si el código está sincronizado
+                    if is_sync_valid(sync_counter):
+                        # Los dispositivos están sincronizados  
+                        if is_timestamp_valid(low_sp_ts):
+                            
+                            print("TS coincide.")
+                            print("¡Código válido!\n")
+                            print(f"delta_time: {delta_time}")
+                            print(f"sync_counter: {sync_counter}")
+                            print(f"battery: {battery}")
+                            print(f"function_code: {function_code}")
+                            print(f"low_sp_ts: {low_sp_ts}")
+                            print(f"btn_timer: {btn_timer}")
+                            print(f"resync_counter: {resync_counter}")
+                            
+                            # Se apunta al siguiente código
+                            sync_counter_local = sync_counter_local + 1
+                        else:
+                            print("El código ha sido enviado fuera de tiempo.")
+                            print("Se ignora el código")
+                    
                     else:
-                        print("El código ha sido enviado fuera de tiempo.")
+                        # Los dispositivos NO están sincronizados
+                        # Se comprueba si están en un rando admisible de sincronía
+                        i = sync_counter_local
+                        for i in range(10):  
+                            plain_hopping_code = decrypt(hopping_code, key, i)   
+                            (delta_time, 
+                            sync_counter, 
+                            battery, 
+                            function_code, 
+                            low_sp_ts, 
+                            btn_timer, 
+                            resync_counter
+                            ) = split_hopping_code_segments(plain_hopping_code)
+                            if is_sync_valid(sync_counter, i):
+                                # El mando está ligeramente desfasado
+                                # Se actualiza en local
+                                sync_counter_local = sync_counter +1
+                                print("Mando desfasado")
+                                print("Se ha resincronizado")
+                                
+                        # El mando está demasiado desfasado
+                        # Se ignora
+                        print("Mando desfasado")
+                        print("Se ignora el código")
                     
                 else:
                     print(f"CRC no coincide.\n" + 

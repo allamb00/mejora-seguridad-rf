@@ -28,12 +28,15 @@ import keyboard
 import random
 import matplotlib as plt
 import crcmod
+import hashlib
+
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
-
 
 
 
@@ -364,26 +367,62 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.qtgui_sink_x_0_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.rtlsdr_source_0.set_center_freq(self.center_freq, 0)
         
+        
 
-# Función para cifrar
-def encrypt(plain_bits, key):
-    # Verificar que la longitud del texto plano sea exactamente 128 bits
-    if len(plain_bits) != 128:
-        raise ValueError(f"La longitud del texto plano debe ser exactamente 128 bits ({len(plain_bits)})")
+# Función para obtener la clave
+def derive_key():
+    global sync_counter
+    seed_bytes = sync_counter.to_bytes(16, byteorder='big')  # Convierte la seed a bytes
+    hash_obj = hashlib.sha256(seed_bytes).digest()  # Deriva un hash SHA-256
+    key = hash_obj[:16]  # Toma los primeros 16 bytes para la clave AES-128
+    iv = hash_obj[16:32]  # Toma los siguientes 16 bytes para el IV
+    return key, iv
 
-    # Convertir la cadena de bits en una cadena de bytes
-    plain_bytes = bytes(int(plain_bits[i:i+8], 2) for i in range(0, len(plain_bits), 8))
+# # Función para cifrar
+# def encrypt(plain_bits, key):
+#     # Verificar que la longitud del texto plano sea exactamente 128 bits
+#     if len(plain_bits) != 128:
+#         raise ValueError(f"La longitud del texto plano debe ser exactamente 128 bits ({len(plain_bits)})")
 
-    # Crear un objeto de cifrado
-    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+#     # Convertir la cadena de bits en una cadena de bytes
+#     plain_bytes = bytes(int(plain_bits[i:i+8], 2) for i in range(0, len(plain_bits), 8))
 
-    # Cifrar el texto plano
-    encryptor = cipher.encryptor()
-    cipher_bytes = encryptor.update(plain_bytes) + encryptor.finalize()
+#     # Crear un objeto de cifrado
+#     cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
 
-    # Convertir los bytes cifrados a bits
-    cipher_bits = ''.join(format(byte, '08b') for byte in cipher_bytes)
+#     # Cifrar el texto plano
+#     encryptor = cipher.encryptor()
+#     cipher_bytes = encryptor.update(plain_bytes) + encryptor.finalize()
 
+#     # Convertir los bytes cifrados a bits
+#     cipher_bits = ''.join(format(byte, '08b') for byte in cipher_bytes)
+
+#     return cipher_bits
+
+def encrypt(bits, key, iv):
+    if len(bits) != 128:
+        raise ValueError(f"La longitud del texto plano debe ser exactamente 128 bits ({len(bits)})")
+
+    if len(key) not in [16, 24, 32]:
+        raise ValueError(f"La clave debe tener una longitud de 16, 24 o 32 bytes ({len(key)})")
+
+    # Se asegura de que el iv cumple los 16 bytes
+    iv_bytes = iv.to_bytes(16, byteorder='big')
+    cipher = AES.new(key, AES.MODE_CBC, iv_bytes)
+
+    # Convierte la cadena de bits a bytes
+    byte_data = int(bits, 2).to_bytes(16, byteorder='big')
+
+    # Cifra los datos
+    cipher_text = cipher.encrypt(byte_data)
+
+    # Asegúrate de que el texto cifrado tiene exactamente 16 bytes
+    if len(cipher_text) != 16:
+        raise ValueError("El texto cifrado no tiene la longitud esperada de 16 bytes")
+
+    # Convierte el texto cifrado a bits
+    cipher_bits = ''.join(f'{byte:08b}' for byte in cipher_text)
+    
     return cipher_bits
 
 
@@ -460,6 +499,7 @@ def build_code(func):
         
                 
         #FINAL HOPPING CODE
+        global sync_counter
         global sync_counter_b 
         plain_hopping_code = (padding_b + 
                         delta_time_b + 
@@ -470,9 +510,11 @@ def build_code(func):
                         button_timer_b +
                         resync_counter_b)
         
-        hopping_code = encrypt(plain_hopping_code, key)
+        # Cifrado del código
+        hopping_code = encrypt(plain_hopping_code, key, sync_counter)
+        print(f"\nHopping code cifrado ({len(hopping_code)}b): {hopping_code}")  
         
-        #Verificación CRC
+        # Verificación CRC
         auth_code_b = calculate_crc(serial_number_b + hopping_code)
         
         #Prints
@@ -485,10 +527,7 @@ def build_code(func):
         print(f"Button timer({len(button_timer_b)}b): {button_timer_b}")
         print(f"Resync counter({len(resync_counter_b)}b): {resync_counter_b}")
         print(f"Authorization code({len(auth_code_b)}b): {auth_code_b}")
-        
-        """
-        CIPHER
-        """              
+                 
         # Construir el rolling code
         rolling_code = (serial_number_b + hopping_code + auth_code_b)
         print(f"\nTexto cifrado ({len(rolling_code)}b): {rolling_code}")   
