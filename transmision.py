@@ -58,7 +58,8 @@ AUTH KEY: 16 Bytes (lesser -> most significant Bytes)
 
 FIJO (32b)
 32b - Serial Number: 	Número de serie que comparten cerradura y llave
-HOPPING CODE (124b)
+HOPPING CODE (128b) 
+ 4b - Padding:  Ajusta el tamaño del bloque para el cifrado
 24b - Delta time:	Segundos que han pasado desde la última pulsación
 24b - Sync counter: 	Cuenta el número de pulsaciones de botones
  8b - Battery: 		Nivel de carga de la batería. 7 bits de % y 1 bit con flag de batería baja
@@ -88,7 +89,12 @@ serial_number_b = to_bits(serial_number, serial_number_len)
 """
 HOPPING
 """
-hopping_code_len = 124
+hopping_code_len = 128
+
+#Padding
+padding = 0
+padding_len = 4
+padding_b = to_bits(padding, padding_len)
 
 #Delta time
 delta_time = 0
@@ -360,9 +366,9 @@ class Transmission(gr.top_block, Qt.QWidget):
 
 # Función para cifrar
 def encrypt(plain_bits, key):
-    # Verificar que la longitud del texto plano sea exactamente 124 bits
-    if len(plain_bits) != 124:
-        raise ValueError(f"La longitud del texto plano debe ser exactamente 124 bits ({len(plain_bits)})")
+    # Verificar que la longitud del texto plano sea exactamente 128 bits
+    if len(plain_bits) != 128:
+        raise ValueError(f"La longitud del texto plano debe ser exactamente 128 bits ({len(plain_bits)})")
 
     # Convertir la cadena de bits en una cadena de bytes
     plain_bytes = bytes(int(plain_bits[i:i+8], 2) for i in range(0, len(plain_bits), 8))
@@ -377,22 +383,19 @@ def encrypt(plain_bits, key):
     # Convertir los bytes cifrados a bits
     cipher_bits = ''.join(format(byte, '08b') for byte in cipher_bytes)
 
-    # Eliminar los ceros no significativos
-    cipher_bits = cipher_bits[:124]
-
     return cipher_bits
 
-def crc(plain_bits):
-    # Verificar que la longitud del texto plano sea exactamente 156 bits
-    if len(plain_bits) != 156:
-        raise ValueError(f"La longitud del texto plano debe ser exactamente 156 bits ({len(plain_bits)})")
+def crc(code_bits):
+    # Verificar que la longitud del texto plano sea exactamente 160 bits
+    if len(code_bits) != 160:
+        raise ValueError(f"La longitud del texto plano debe ser exactamente 160 bits ({len(code_bits)})")
 
     # Convertir la cadena de bits en una cadena de bytes
-    plain_bytes = bytes(int(plain_bits[i:i+8], 2) for i in range(0, len(plain_bits), 8))
+    code_bytes = bytes(int(code_bits[i:i+8], 2) for i in range(0, len(code_bits), 8))
 
     # Calcular el resumen criptográfico (hash) utilizando SHA-256
     digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-    digest.update(plain_bytes)
+    digest.update(code_bytes)
     hash_result = digest.finalize()
 
     # Convertir los bytes del hash a bits
@@ -462,7 +465,8 @@ def build_code(func):
                 
         #FINAL HOPPING CODE
         global sync_counter_b 
-        plain_hopping_code = (delta_time_b + 
+        plain_hopping_code = (padding_b + 
+                        delta_time_b + 
                         sync_counter_b + 
                         battery_b + 
                         function_code_b + 
@@ -509,9 +513,8 @@ def main(options=None):
     parser.add_argument('--func', type=str, help='Código de función: 1-2-3-4')
     args = parser.parse_args()
     build_code(args.func)
-    top_block_cls=Transmission
-    
     top_block_cls = Transmission
+    
     qapp = Qt.QApplication(sys.argv)
     tb = top_block_cls()
     tb.start()

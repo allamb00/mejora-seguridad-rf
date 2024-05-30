@@ -9,10 +9,9 @@ import struct
 import keyboard
 import time
 
-from collections import deque
-
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 
 # Definir clave y IV fijos
@@ -30,14 +29,17 @@ sock.bind((UDP_IP, UDP_PORT))
 
 # Inicializa un buffer con una longitud máxima de 188+25 caracteres para que
 # quepa el código entero y no quede cortado por un cambio de 
-buffer_max_length = 213
+buffer_max_length = 216
 buffer = []
 count = 0 #Variable global para que no se corte la cuenta entre payloads
 
 #Serial del fabricante para distinguir el código
 preamble = '00000111010110111100110100010101' 
 preamble_len = len(preamble)
-code_len = 188 #Tamaño total del código
+code_len = 192 #Tamaño total del código
+
+#Configuración de la ventana de tiempo válida para la recepción
+window_seconds = 5
 
 
 
@@ -70,7 +72,7 @@ def reduce_control_bits(input_bits):
 
     return output_bits
 
-#Función que procesa los datos en un buffer a medida que llegan
+# Función que procesa los datos en un buffer a medida que llegan
 def process_bits(bit_data):   
     global buffer
     
@@ -88,33 +90,47 @@ def process_bits(bit_data):
         if preamble_index != -1:
             # Verificar si la cadena de 188 bits está completa
             if preamble_index + code_len <= len(buffer_bits):
+                # Código válido encontrado
                 # Extraer la cadena de 188 bits
                 code = buffer_bits[preamble_index:preamble_index+code_len]
-                print("\nCódigo válido encontrado")
                 buffer = []
                 return code
-            else:
-                print(".", end="")
         
         # Eliminar los bits antiguos del buffer
         buffer = buffer[-buffer_max_length:]
 
-#Función que separa los segmentos del rolling code
+# Función que separa los segmentos del rolling code
 def split_code_segments(code):
-    if len(code) != 188:
+    if len(code) != 192:
         raise ValueError(f"La longitud del código no es de 188 caracteres ({len(code)})")
 
     fixed = code[:32]
-    hopping = code[32:155]
-    crc = code[156:188]
+    hopping = code[32:160]
+    crc = code[160:]
 
     return fixed, hopping, crc
 
+# Función que separa los segmentos del rolling code
+def split_hopping_code_segments(code):
+    if len(code) != 128:
+        raise ValueError(f"La longitud del texto cifrado debe ser exactamente 124 bits ({len(code)})")
+
+    padding = code[:4]
+    delta_time = code[4:28]
+    sync_counter = code[28:52]
+    battery = code[52:60]
+    function_code = code[60:64]
+    low_sp_ts = code[64:96]
+    btn_timer = code[96:112]
+    resync_counter = code[112:128]
+
+    return delta_time, sync_counter, battery, function_code, low_sp_ts, btn_timer, resync_counter
+
 # Función para descifrar
 def decrypt(cipher_bits, key):
-    # Verificar que la longitud del texto cifrado sea exactamente 124 bits
-    if len(cipher_bits) != 124:
-        raise ValueError("La longitud del texto cifrado debe ser exactamente 124 bits")
+    # Verificar que la longitud del texto cifrado sea exactamente 128 bits
+    if len(cipher_bits) != 128:
+        raise ValueError(f"La longitud del texto cifrado debe ser exactamente 128 bits ({cipher_bits})")
 
     # Convertir la cadena de bits cifrados en una cadena de bytes
     cipher_bytes = bytes(int(cipher_bits[i:i+8], 2) for i in range(0, len(cipher_bits), 8))
@@ -131,6 +147,41 @@ def decrypt(cipher_bits, key):
 
     return decrypted_bits
 
+def crc(code_bits):
+    # Verificar que la longitud del texto plano sea exactamente 160 bits
+    if len(code_bits) != 160:
+        raise ValueError(f"La longitud del texto plano debe ser exactamente 160 bits ({len(code_bits)})")
+
+    # Convertir la cadena de bits en una cadena de bytes
+    code_bytes = bytes(int(code_bits[i:i+8], 2) for i in range(0, len(code_bits), 8))
+
+    # Calcular el resumen criptográfico (hash) utilizando SHA-256
+    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+    digest.update(code_bytes)
+    hash_result = digest.finalize()
+
+    # Convertir los bytes del hash a bits
+    hash_bits = ''.join(format(byte, '08b') for byte in hash_result)
+
+    # Tomar los primeros 32 bits del resultado del hash como el CRC
+    crc_bits = hash_bits[:32]
+
+    return crc_bits
+
+def is_timestamp_valid(bin_timestamp):
+    # Convertir el timestamp binario a un entero
+    timestamp = int(bin_timestamp, 2)
+    
+    # Obtener el timestamp actual
+    current_timestamp = int(time.time())
+
+    # Verificar si el timestamp está dentro de la ventana de tiempo
+    if current_timestamp - window_seconds <= timestamp <= current_timestamp + window_seconds:
+        return True
+    else:
+        return False
+
+
 def main():
     # Bucle para recibir datos continuamente
     print("Escuchando...")
@@ -143,40 +194,55 @@ def main():
             reduced = reduce_control_bits(replaced)  
             
             rolling_code = 0
-            rolling_code = process_bits(reduced) #Busca el preámbulo en la entrada
+            rolling_code = process_bits(reduced) # Busca el preámbulo en la entrada
             if rolling_code:
-                #Separar el código en parte fija, dinámica y CRC32
-                fixed_code, hopping_code, crc = split_code_segments(rolling_code)
+                # Separar el código en parte fija, dinámica y CRC32
+                fixed_code, hopping_code, crc_code = split_code_segments(rolling_code)
                 print(f'Parte fija: {fixed_code}')
                 print(f'Hopping code: {hopping_code}')
-                print(f'CRC-32: {crc}')
-            
-            # """
-            # DECIPHER
-            # """
-            # # Descifrar el hopping_code
-            # plain_hopping_code = decrypt(hopping_code, key)
-            # print("Hopping code descifrado:", plain_hopping_code)
-    
-            # """ Proceso inverso para resolver el timestamp en bytes
-            # bytes_timestamp = b'\x40\x09\x21\xfb\x4d\x2b\x5f\x09'  # Ejemplo de secuencia de bytes
-    
-            # # Desempaquetar los bytes en un flotante de doble precisión
-            # timestamp_flotante = struct.unpack('d', bytes_timestamp)[0]
-    
-            # # Obtener el timestamp utilizando time.mktime()
-            # timestamp = time.mktime(time.gmtime()) + (timestamp_flotante - time.time())
-    
-            # print(timestamp)
-            # """
+                print(f'CRC-32: {crc_code}')
+                
+                # Concatenar los bits y calcular el CRC
+                combined_code = fixed_code + hopping_code
+                computed_crc = crc(combined_code)
+                
+                # Comparar con el CRC esperado
+                if computed_crc == crc_code:
+                    print("CRC coincide. ", end='')
+                    
+                    # Separamos la parte dinámica en cada uno de sus campos
+                    plain_hopping_code = decrypt(hopping_code, key)                    
+                    (delta_time, 
+                    sync_counter, 
+                    battery, 
+                    function_code, 
+                    low_sp_ts, 
+                    btn_timer, 
+                    resync_counter
+                    ) = split_hopping_code_segments(plain_hopping_code)
+                    
+                    if is_timestamp_valid(low_sp_ts) :
+                        
+                        print("TS coincide.")
+                        print("¡Código válido!\n")
+                        print(f"delta_time: {delta_time}")
+                        print(f"sync_counter: {sync_counter}")
+                        print(f"battery: {battery}")
+                        print(f"function_code: {function_code}")
+                        print(f"low_sp_ts: {low_sp_ts}")
+                        print(f"btn_timer: {btn_timer}")
+                        print(f"resync_counter: {resync_counter}")
 
-            
-            
-            
-            
-            
-            
-            
+
+                    else:
+                        print("El código ha sido enviado fuera de tiempo.")
+                    
+                else:
+                    print(f"CRC no coincide.\n" + 
+                          f"Esperado: {computed_crc}\n" +
+                          f"Original: {crc_code}")
+                
+                print("\nEscuchando...")
             
     finally:
         sock.close()  # Cierra el socket al finalizar el script
