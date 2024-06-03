@@ -155,27 +155,6 @@ def derive_key(seed):
     iv = hash_obj[16:32]  # Toma los siguientes 16 bytes para el IV
     return key, iv
 
-# # Función para descifrar
-# def decrypt(cipher_bits, key):
-#     # Verificar que la longitud del texto cifrado sea exactamente 128 bits
-#     if len(cipher_bits) != 128:
-#         raise ValueError(f"La longitud del texto cifrado debe ser exactamente 128 bits ({cipher_bits})")
-
-#     # Convertir la cadena de bits cifrados en una cadena de bytes
-#     cipher_bytes = bytes(int(cipher_bits[i:i+8], 2) for i in range(0, len(cipher_bits), 8))
-
-#     # Crear un objeto de cifrado
-#     cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
-
-#     # Descifrar el texto cifrado
-#     decryptor = cipher.decryptor()
-#     decrypted_bytes = decryptor.update(cipher_bytes) + decryptor.finalize()
-
-#     # Convertir los bytes descifrados a bits
-#     decrypted_bits = ''.join(format(byte, '08b') for byte in decrypted_bytes)
-
-#     return decrypted_bits
-
 def decrypt(cipher_bits, key, iv):
     if len(cipher_bits) != 128:
         raise ValueError(f"La longitud del texto cifrado debe ser exactamente 128 bits ({len(cipher_bits)})")
@@ -291,53 +270,19 @@ def main():
                     btn_timer, 
                     resync_counter
                     ) = split_hopping_code_segments(hopping_code)
-                    
-                    # Se comprueba si el código está sincronizado
-                    if is_sync_valid(sync_counter):
-                        # Los dispositivos están sincronizados  
-                        if is_timestamp_valid(low_sp_ts):
-                            
-                            print("TS coincide.")
-                            print("¡Código válido!\n")
-                            print(f"delta_time: {delta_time}")
-                            print(f"sync_counter: {sync_counter}")
-                            print(f"battery: {battery}")
-                            print(f"function_code: {function_code}")
-                            print(f"low_sp_ts: {low_sp_ts}")
-                            print(f"btn_timer: {btn_timer}")
-                            print(f"resync_counter: {resync_counter}")
-                            
-                            # Se apunta al siguiente código
-                            sync_counter_local = sync_counter_local + 1
-                        else:
-                            print("El código ha sido enviado fuera de tiempo.")
-                            print("Se ignora el código")
-                    
-                    else:
-                        # Los dispositivos NO están sincronizados
-                        # Se comprueba si están en un rando admisible de sincronía
-                        i = sync_counter_local
-                        for i in range(10):  
-                            plain_hopping_code = decrypt(hopping_code, key, i)   
-                            (delta_time, 
-                            sync_counter, 
-                            battery, 
-                            function_code, 
-                            low_sp_ts, 
-                            btn_timer, 
-                            resync_counter
-                            ) = split_hopping_code_segments(plain_hopping_code)
-                            if is_sync_valid(sync_counter, i):
-                                # El mando está ligeramente desfasado
-                                # Se actualiza en local
-                                sync_counter_local = sync_counter +1
-                                print("Mando desfasado")
-                                print("Se ha resincronizado")
-                                
-                        # El mando está demasiado desfasado
-                        # Se ignora
-                        print("Mando desfasado")
-                        print("Se ignora el código")
+                        
+                    print("TS coincide.")
+                    print("¡Código válido!\n")
+                    print(f"delta_time: {delta_time}")
+                    print(f"sync_counter: {sync_counter}")
+                    print(f"battery: {battery}")
+                    print(f"function_code: {function_code}")
+                    print(f"low_sp_ts: {low_sp_ts}")
+                    print(f"btn_timer: {btn_timer}")
+                    print(f"resync_counter: {resync_counter}")
+                        
+                    # Se apunta al siguiente código
+                    sync_counter_local = sync_counter_local + 1
                     
                 else:
                     print(f"CRC no coincide.\n" + 
