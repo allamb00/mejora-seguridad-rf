@@ -313,6 +313,13 @@ class Transmission(gr.top_block, Qt.QWidget):
         	audio_stop=100e3,
         )
 
+        # File Sink Block to save the transmitted data
+        self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_gr_complex*1, 'emision', False)
+        self.blocks_file_sink_0.set_unbuffered(False)
+
+        # File Source Block to read the received data
+        self.blocks_file_source_0 = blocks.file_source(gr.sizeof_gr_complex*1, 'emision', True)
+        # self.blocks_file_source_0.set_begin_tag(pmt.PMT_NIL)
 
         ##################################################
         # Connections
@@ -330,6 +337,11 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.connect((self.rational_resampler_xxx_0, 0), (self.blocks_add_const_vxx_0, 0))
         self.connect((self.rtlsdr_source_0, 0), (self.blocks_throttle2_0, 0))
 
+        # Connections for the file sink
+        self.connect((self.blocks_repeat_0, 0), (self.blocks_file_sink_0, 0))
+
+        # Connections for the file source (virtualized RTL-SDR)
+        self.connect((self.blocks_file_source_0, 0), (self.blocks_throttle2_0, 0))
 
     def closeEvent(self, event):
         self.settings = Qt.QSettings("GNU Radio", "Transmission")
@@ -366,7 +378,7 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.qtgui_sink_x_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.qtgui_sink_x_0_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.rtlsdr_source_0.set_center_freq(self.center_freq, 0)
-        
+
         
 
 # Función para obtener la clave
@@ -501,7 +513,7 @@ def build_code(func):
         #FINAL HOPPING CODE
         global sync_counter
         global sync_counter_b 
-        plain_hopping_code = (padding_b + 
+        hopping_code = (padding_b + 
                         delta_time_b + 
                         sync_counter_b + 
                         battery_b + 
@@ -511,8 +523,8 @@ def build_code(func):
                         resync_counter_b)
         
         # Cifrado del código
-        hopping_code = encrypt(plain_hopping_code, key, sync_counter)
-        print(f"\nHopping code cifrado ({len(hopping_code)}b): {hopping_code}")  
+        # hopping_code = encrypt(hopping_code, key, sync_counter)
+        print(f"\nHopping code sin cifrado ({len(hopping_code)}b): {hopping_code}")  
         
         # Verificación CRC
         auth_code_b = calculate_crc(serial_number_b + hopping_code)
@@ -530,7 +542,7 @@ def build_code(func):
                  
         # Construir el rolling code
         rolling_code = (serial_number_b + hopping_code + auth_code_b)
-        print(f"\nTexto cifrado ({len(rolling_code)}b): {rolling_code}")   
+        print(f"\nRolling code ({len(rolling_code)}b): {rolling_code}")   
         
         # Transformar el código en un array para poder ser enviado
         global rolling_code_v

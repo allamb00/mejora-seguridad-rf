@@ -222,7 +222,6 @@ def is_sync_valid(sync_counter_keyfob_b, sync_counter = None):
         return False
     
 
-
 def main():
     # Bucle para recibir datos continuamente
     print("Escuchando...")
@@ -259,7 +258,7 @@ def main():
                     
                     # Se descifra el código
                     global sync_counter_local
-                    hopping_code = decrypt(hopping_code, key, sync_counter_local) 
+                    # hopping_code = decrypt(hopping_code, key, sync_counter_local) 
                     
                     # Se separa la parte dinámica en cada uno de sus campos
                     (delta_time, 
