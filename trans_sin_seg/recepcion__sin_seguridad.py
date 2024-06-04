@@ -269,8 +269,7 @@ def main():
                     btn_timer, 
                     resync_counter
                     ) = split_hopping_code_segments(hopping_code)
-                        
-                    print("TS coincide.")
+                    
                     print("¡Código válido!\n")
                     print(f"delta_time: {delta_time}")
                     print(f"sync_counter: {sync_counter}")
@@ -278,10 +277,26 @@ def main():
                     print(f"function_code: {function_code}")
                     print(f"low_sp_ts: {low_sp_ts}")
                     print(f"btn_timer: {btn_timer}")
-                    print(f"resync_counter: {resync_counter}")
+                    print(f"resync_counter: {resync_counter}\n")
+                    
+                    function = int(function_code, 2)
+                    
+                    if function == 1:
+                        print('Apertura de puertas')
+                    elif function == 2:
+                        print('Bloqueo de puertas')
+                    elif function == 3:
+                        print('Apertura de maletero')
+                    elif function == 4:
+                        print('Encendido de motor')
                         
                     # Se apunta al siguiente código
                     sync_counter_local = sync_counter_local + 1
+                    
+                    # Se guarda el valor del código capturado                    
+                    with open("captura", "w") as file:
+                        file.write(rolling_code)
+
                     
                 else:
                     print(f"CRC no coincide.\n" + 
