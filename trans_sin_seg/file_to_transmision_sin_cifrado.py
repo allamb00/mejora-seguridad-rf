@@ -109,7 +109,6 @@ class Transmission(gr.top_block, Qt.QWidget):
         ##################################################
         # Variables
         ##################################################
-        self.samp_rate_0 = samp_rate_0 = 2e6
         self.samp_rate = samp_rate = 2e6
         self.center_freq = center_freq = 433e6
 
@@ -305,27 +304,6 @@ def derive_key():
     key = hash_obj[:16]  # Toma los primeros 16 bytes para la clave AES-128
     iv = hash_obj[16:32]  # Toma los siguientes 16 bytes para el IV
     return key, iv
-
-# # Función para cifrar
-# def encrypt(plain_bits, key):
-#     # Verificar que la longitud del texto plano sea exactamente 128 bits
-#     if len(plain_bits) != 128:
-#         raise ValueError(f"La longitud del texto plano debe ser exactamente 128 bits ({len(plain_bits)})")
-
-#     # Convertir la cadena de bits en una cadena de bytes
-#     plain_bytes = bytes(int(plain_bits[i:i+8], 2) for i in range(0, len(plain_bits), 8))
-
-#     # Crear un objeto de cifrado
-#     cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
-
-#     # Cifrar el texto plano
-#     encryptor = cipher.encryptor()
-#     cipher_bytes = encryptor.update(plain_bytes) + encryptor.finalize()
-
-#     # Convertir los bytes cifrados a bits
-#     cipher_bits = ''.join(format(byte, '08b') for byte in cipher_bytes)
-
-#     return cipher_bits
 
 def encrypt(bits, key, iv):
     if len(bits) != 128:

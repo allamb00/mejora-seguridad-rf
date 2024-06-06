@@ -15,16 +15,17 @@ from gnuradio import analog
 from gnuradio import blocks
 from gnuradio import filter
 from gnuradio import gr
+from gnuradio import network
 from gnuradio.fft import window
+
 import sys
 import signal
-from gnuradio import network
 import osmosdr
 import sip
 import argparse
-
 import crcmod
 import hashlib
+import time
 
 from Crypto.Cipher import AES
 
@@ -109,7 +110,6 @@ class Transmission(gr.top_block, Qt.QWidget):
         ##################################################
         # Variables
         ##################################################
-        self.samp_rate_0 = samp_rate_0 = 2e6
         self.samp_rate = samp_rate = 2e6
         self.center_freq = center_freq = 433e6
 
@@ -306,27 +306,6 @@ def derive_key():
     iv = hash_obj[16:32]  # Toma los siguientes 16 bytes para el IV
     return key, iv
 
-# # Función para cifrar
-# def encrypt(plain_bits, key):
-#     # Verificar que la longitud del texto plano sea exactamente 128 bits
-#     if len(plain_bits) != 128:
-#         raise ValueError(f"La longitud del texto plano debe ser exactamente 128 bits ({len(plain_bits)})")
-
-#     # Convertir la cadena de bits en una cadena de bytes
-#     plain_bytes = bytes(int(plain_bits[i:i+8], 2) for i in range(0, len(plain_bits), 8))
-
-#     # Crear un objeto de cifrado
-#     cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
-
-#     # Cifrar el texto plano
-#     encryptor = cipher.encryptor()
-#     cipher_bytes = encryptor.update(plain_bytes) + encryptor.finalize()
-
-#     # Convertir los bytes cifrados a bits
-#     cipher_bits = ''.join(format(byte, '08b') for byte in cipher_bytes)
-
-#     return cipher_bits
-
 def encrypt(bits, key, iv):
     if len(bits) != 128:
         raise ValueError(f"La longitud del texto plano debe ser exactamente 128 bits ({len(bits)})")
@@ -380,6 +359,19 @@ def build_code(func):
         
         # Se modifica la función para que abra las puertas
         captura = captura[:92] + '0001' + captura[96:]
+        
+        # Se modifica el tiempo para que sea el actual        
+        seconds, millis = divmod(time.time(),1)
+        timestamp = int(seconds)        
+        timestamp_len = 32
+        timestamp_bits = to_bits(timestamp, timestamp_len)        
+        captura = captura[:96] + timestamp_bits + captura[128:]
+        
+        # Se modifica el contador de pulsaciones para sincronizarlo
+        sinc = int(captura[60:84],2)
+        sinc = sinc + 1
+        sinc_b = to_bits(sinc, 24)
+        captura = captura[:60] + sinc_b + captura[84:]
         
         # Reelaboracion del CRC
         auth_code_b = calculate_crc(captura[:160])

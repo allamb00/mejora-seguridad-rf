@@ -5,19 +5,11 @@ Spyder Editor
 This is a temporary script file.
 """
 import socket
-import struct
-import keyboard
 import time
 import crcmod
 import hashlib
 
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
-
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
 
 # Definir clave y IV fijos
 key = b'0123456789abcdef0123456789abcdef'  # 32 bytes para AES-256
@@ -155,27 +147,6 @@ def derive_key(seed):
     iv = hash_obj[16:32]  # Toma los siguientes 16 bytes para el IV
     return key, iv
 
-# # Función para descifrar
-# def decrypt(cipher_bits, key):
-#     # Verificar que la longitud del texto cifrado sea exactamente 128 bits
-#     if len(cipher_bits) != 128:
-#         raise ValueError(f"La longitud del texto cifrado debe ser exactamente 128 bits ({cipher_bits})")
-
-#     # Convertir la cadena de bits cifrados en una cadena de bytes
-#     cipher_bytes = bytes(int(cipher_bits[i:i+8], 2) for i in range(0, len(cipher_bits), 8))
-
-#     # Crear un objeto de cifrado
-#     cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
-
-#     # Descifrar el texto cifrado
-#     decryptor = cipher.decryptor()
-#     decrypted_bytes = decryptor.update(cipher_bytes) + decryptor.finalize()
-
-#     # Convertir los bytes descifrados a bits
-#     decrypted_bits = ''.join(format(byte, '08b') for byte in decrypted_bytes)
-
-#     return decrypted_bits
-
 def decrypt(cipher_bits, key, iv):
     if len(cipher_bits) != 128:
         raise ValueError(f"La longitud del texto cifrado debe ser exactamente 128 bits ({len(cipher_bits)})")
@@ -229,7 +200,7 @@ def is_timestamp_valid(bin_timestamp):
     
 def is_sync_valid(sync_counter_keyfob_b, sync_counter = None):
     # Convertir el sync counter a entero
-    sync_counter_keyfob = int(sync_counter_keyfob_b)
+    sync_counter_keyfob = int(sync_counter_keyfob_b, 2)
     
     # Si no se recibe un segundo argumento, se compara con el contador local
     if sync_counter is None:
@@ -269,19 +240,12 @@ def main():
                 combined_code = fixed_code + hopping_code
                 computed_crc = calculate_crc(combined_code)
                 
-                # print("----------------AMOAVE SI RULA EL CRC------------------")
-                # print("rolling code: " + rolling_code[:160])
-                # print("combind.code: " + combined_code)
-                # print("-------------------------------------------------------")
-                
                 # Comparar con el CRC esperado
                 if computed_crc == crc_code:
                     print("CRC coincide. ", end='')
                     
                     # Se descifra el código
                     global sync_counter_local
-                    # hopping_code = decrypt(hopping_code, key, sync_counter_local) 
-                    
                     # Se separa la parte dinámica en cada uno de sus campos
                     (delta_time, 
                     sync_counter, 
@@ -307,8 +271,24 @@ def main():
                             print(f"btn_timer: {btn_timer}")
                             print(f"resync_counter: {resync_counter}")
                             
+                            
+                            function = int(function_code, 2)
+                            
+                            if function == 1:
+                                print('Apertura de puertas')
+                            elif function == 2:
+                                print('Bloqueo de puertas')
+                            elif function == 3:
+                                print('Apertura de maletero')
+                            elif function == 4:
+                                print('Encendido de motor')
+                                
                             # Se apunta al siguiente código
                             sync_counter_local = sync_counter_local + 1
+                            
+                            # Se guarda el valor del código capturado                    
+                            with open("captura", "w") as file:
+                                file.write(rolling_code)
                         else:
                             print("El código ha sido enviado fuera de tiempo.")
                             print("Se ignora el código")
@@ -318,7 +298,7 @@ def main():
                         # Se comprueba si están en un rando admisible de sincronía
                         i = sync_counter_local
                         for i in range(10):  
-                            plain_hopping_code = decrypt(hopping_code, key, i)   
+                            # hopping_code = decrypt(hopping_code, key, i)   
                             (delta_time, 
                             sync_counter, 
                             battery, 
@@ -326,11 +306,11 @@ def main():
                             low_sp_ts, 
                             btn_timer, 
                             resync_counter
-                            ) = split_hopping_code_segments(plain_hopping_code)
+                            ) = split_hopping_code_segments(hopping_code)
                             if is_sync_valid(sync_counter, i):
                                 # El mando está ligeramente desfasado
                                 # Se actualiza en local
-                                sync_counter_local = sync_counter +1
+                                sync_counter_local = int(sync_counter, 2) + 1
                                 print("Mando desfasado")
                                 print("Se ha resincronizado")
                                 
@@ -340,7 +320,7 @@ def main():
                         print("Se ignora el código")
                     
                 else:
-                    print(f"CRC no coincide.\n" + 
+                    print("CRC no coincide.\n" + 
                           f"Esperado: {computed_crc}\n" +
                           f"Original: {crc_code}")
                 

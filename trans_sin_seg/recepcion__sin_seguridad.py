@@ -5,19 +5,11 @@ Spyder Editor
 This is a temporary script file.
 """
 import socket
-import struct
-import keyboard
 import time
 import crcmod
 import hashlib
 
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
-
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
 
 # Definir clave y IV fijos
 key = b'0123456789abcdef0123456789abcdef'  # 32 bytes para AES-256
@@ -299,7 +291,7 @@ def main():
 
                     
                 else:
-                    print(f"CRC no coincide.\n" + 
+                    print("CRC no coincide.\n" + 
                           f"Esperado: {computed_crc}\n" +
                           f"Original: {crc_code}")
                 

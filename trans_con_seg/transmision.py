@@ -15,30 +15,22 @@ from gnuradio import analog
 from gnuradio import blocks
 from gnuradio import filter
 from gnuradio import gr
+from gnuradio import network
 from gnuradio.fft import window
+
 import sys
 import signal
-from gnuradio import network
 import osmosdr
 import sip
 import argparse
-
 import time
-import keyboard
 import random
-import matplotlib as plt
 import crcmod
 import hashlib
 
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
-
-
 
 # Definición de la función para convertir varios tipos de valores a bits
 def to_bits(value, length=None):
@@ -108,7 +100,6 @@ delta_time_b = to_bits(delta_time, delta_time_len)
 last_sent_sgn_ts = 0
 
 #Sync counter
-#TODO contar las veces que se envían mensajes
 sync_counter = 0
 sync_counter_len = 24
 sync_counter_b = to_bits(sync_counter, sync_counter_len)
@@ -179,7 +170,6 @@ class Transmission(gr.top_block, Qt.QWidget):
         ##################################################
         # Variables
         ##################################################
-        self.samp_rate_0 = samp_rate_0 = 2e6
         self.samp_rate = samp_rate = 2e6
         self.center_freq = center_freq = 433e6
 
@@ -313,14 +303,6 @@ class Transmission(gr.top_block, Qt.QWidget):
         	audio_stop=100e3,
         )
 
-        # File Sink Block to save the transmitted data
-        self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_gr_complex*1, 'emision', False)
-        self.blocks_file_sink_0.set_unbuffered(False)
-
-        # File Source Block to read the received data
-        self.blocks_file_source_0 = blocks.file_source(gr.sizeof_gr_complex*1, 'emision', True)
-        self.blocks_file_source_0.set_begin_tag(pmt.PMT_NIL)
-
         ##################################################
         # Connections
         ##################################################
@@ -336,12 +318,6 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.connect((self.blocks_vector_source_x_0, 0), (self.blocks_repeat_0, 0))
         self.connect((self.rational_resampler_xxx_0, 0), (self.blocks_add_const_vxx_0, 0))
         self.connect((self.rtlsdr_source_0, 0), (self.blocks_throttle2_0, 0))
-
-        # Connections for the file sink
-        self.connect((self.blocks_repeat_0, 0), (self.blocks_file_sink_0, 0))
-
-        # Connections for the file source (virtualized RTL-SDR)
-        self.connect((self.blocks_file_source_0, 0), (self.blocks_throttle2_0, 0))
 
     def closeEvent(self, event):
         self.settings = Qt.QSettings("GNU Radio", "Transmission")
@@ -389,26 +365,6 @@ def derive_key():
     iv = hash_obj[16:32]  # Toma los siguientes 16 bytes para el IV
     return key, iv
 
-# # Función para cifrar
-# def encrypt(plain_bits, key):
-#     # Verificar que la longitud del texto plano sea exactamente 128 bits
-#     if len(plain_bits) != 128:
-#         raise ValueError(f"La longitud del texto plano debe ser exactamente 128 bits ({len(plain_bits)})")
-
-#     # Convertir la cadena de bits en una cadena de bytes
-#     plain_bytes = bytes(int(plain_bits[i:i+8], 2) for i in range(0, len(plain_bits), 8))
-
-#     # Crear un objeto de cifrado
-#     cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
-
-#     # Cifrar el texto plano
-#     encryptor = cipher.encryptor()
-#     cipher_bytes = encryptor.update(plain_bytes) + encryptor.finalize()
-
-#     # Convertir los bytes cifrados a bits
-#     cipher_bits = ''.join(format(byte, '08b') for byte in cipher_bytes)
-
-#     return cipher_bits
 
 def encrypt(bits, key, iv):
     if len(bits) != 128:
@@ -488,7 +444,6 @@ def build_code(func):
         
         # Redondear hacia abajo en múltiplos de 0.050
         random_press_time_rounded = int(random_press_time / 50) * 50
-        #TODO La longitud de almacenamiento de los bytes parece variar de unas pulsaciones a otras        
         button_timer = random_press_time_rounded
         button_timer_len = 16
         button_timer_b = to_bits(button_timer, button_timer_len)

@@ -15,30 +15,18 @@ from gnuradio import analog
 from gnuradio import blocks
 from gnuradio import filter
 from gnuradio import gr
+from gnuradio import network
 from gnuradio.fft import window
+
 import sys
 import signal
-from gnuradio import network
 import osmosdr
 import sip
 import argparse
-
-import time
-import keyboard
-import random
-import matplotlib as plt
 import crcmod
 import hashlib
 
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
-
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
-
-
 
 # Definición de la función para convertir varios tipos de valores a bits
 def to_bits(value, length=None):
@@ -81,66 +69,6 @@ btn_res = 50
 last_sent_sgn_ts = 0
 signals_sent = 0
 
-
-"""
-FIXED
-"""
-#Serial
-serial_number = 123456789
-serial_number_len = 32
-serial_number_b = to_bits(serial_number, serial_number_len)
-
-"""
-HOPPING
-"""
-hopping_code_len = 128
-
-#Padding
-padding = 0
-padding_len = 4
-padding_b = to_bits(padding, padding_len)
-
-#Delta time
-delta_time = 0
-delta_time_len = 24
-delta_time_b = to_bits(delta_time, delta_time_len)
-
-last_sent_sgn_ts = 0
-
-#Sync counter
-#TODO contar las veces que se envían mensajes
-sync_counter = 0
-sync_counter_len = 24
-sync_counter_b = to_bits(sync_counter, sync_counter_len)
-
-#Battery
-bat_percent = 100
-low_bat_flag = 0
-
-#Button timer
-button_timer = 0
-button_timer_len = 16
-button_timer_b = to_bits(button_timer, button_timer_len)
-
-#Resync counter
-resync_counter = 0
-resync_counter_len = 16
-resync_counter_b = to_bits(resync_counter, resync_counter_len)
-
-"""
-AUTHENTICATION
-"""
-#Authentication code
-auth_code = 0
-auth_code_len = 32
-auth_code_b = to_bits(auth_code, auth_code_len)
-
-"""
-CYPHER
-"""
-# Definir clave y IV fijos
-key = b'0123456789abcdef0123456789abcdef'  # 32 bytes para AES-256
-iv = b'0123456789abcdef'  # 16 bytes para el IV
 #Vector del rolling code para poder ser enviado
 rolling_code_v = 0
 
@@ -364,7 +292,8 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.qtgui_sink_x_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.qtgui_sink_x_0_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.rtlsdr_source_0.set_center_freq(self.center_freq, 0)
-  
+
+        
 
 # Función para obtener la clave
 def derive_key():
@@ -374,27 +303,6 @@ def derive_key():
     key = hash_obj[:16]  # Toma los primeros 16 bytes para la clave AES-128
     iv = hash_obj[16:32]  # Toma los siguientes 16 bytes para el IV
     return key, iv
-
-# # Función para cifrar
-# def encrypt(plain_bits, key):
-#     # Verificar que la longitud del texto plano sea exactamente 128 bits
-#     if len(plain_bits) != 128:
-#         raise ValueError(f"La longitud del texto plano debe ser exactamente 128 bits ({len(plain_bits)})")
-
-#     # Convertir la cadena de bits en una cadena de bytes
-#     plain_bytes = bytes(int(plain_bits[i:i+8], 2) for i in range(0, len(plain_bits), 8))
-
-#     # Crear un objeto de cifrado
-#     cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
-
-#     # Cifrar el texto plano
-#     encryptor = cipher.encryptor()
-#     cipher_bytes = encryptor.update(plain_bytes) + encryptor.finalize()
-
-#     # Convertir los bytes cifrados a bits
-#     cipher_bits = ''.join(format(byte, '08b') for byte in cipher_bytes)
-
-#     return cipher_bits
 
 def encrypt(bits, key, iv):
     if len(bits) != 128:
@@ -438,106 +346,30 @@ def calculate_crc(data, polynomial=0x104C11DB7, init_value=0):
 
     return crc_bits
 
-#Función para construir el código del envío
+#Función para construir el código del envío desde el fichero almacenado
 def build_code(func):
-    if func == '1' or func == '2' or func == '3' or func == '4':
-        print("Function", func, "sent")
-        #Enviar el ts, almacenar el delta etc
-        #...
-                
-        #Function code
-        if func=='1':
-            function_code = 1
-        elif func == '2':
-            function_code = 2
-        elif func == '3':
-            function_code = 4
-        elif func == '4':
-            function_code = 8
-                
-        function_code_len = 4
-        function_code_b = to_bits(function_code, function_code_len)
-        
-        #Battery
-        #Se concatena el flag de batería baja con el % de batería  
-        low_bat_flag_len = 1
-        low_bat_flag_b = to_bits(low_bat_flag, low_bat_flag_len)
-        
-        bat_percent_len = 7
-        bat_percent_b = to_bits(bat_percent, bat_percent_len)
-        
-        battery_b = low_bat_flag_b + bat_percent_b                
-        
-        #Para la generación de pulsaciones del botón, se va a generar un número aleatorio entre 50 y 1000ms
-        #Luego se multiplica por la resolución de tiempo de pulsación
-        random_press_time = random.uniform(50, 1000)
-        
-        # Redondear hacia abajo en múltiplos de 0.050
-        random_press_time_rounded = int(random_press_time / 50) * 50
-        #TODO La longitud de almacenamiento de los bytes parece variar de unas pulsaciones a otras        
-        button_timer = random_press_time_rounded
-        button_timer_len = 16
-        button_timer_b = to_bits(button_timer, button_timer_len)
-
-        #Low speed timestamp
-        global time_res
-        
-        seconds, millis = divmod(time.time(),1)
-        timestamp = int(seconds)        
-        low_speed_ts_len = 32
-        low_speed_ts_b = to_bits(timestamp, low_speed_ts_len)
-        
-        
-        #Delta time        
-        global last_sent_sgn_ts
-        delta_time = timestamp - last_sent_sgn_ts #Se calcula la diferencia en segundos desde la última pulsación
-        last_sent_sgn_ts = timestamp #Se actualiza la última pulsación
-        delta_time_b = to_bits(min(delta_time, 16777215), delta_time_len) #Recoge la diferencia entre timestamps o el valor máximo del campo en caso de superarlo
-        
-                
-        #FINAL HOPPING CODE
-        global sync_counter
-        global sync_counter_b 
-        plain_hopping_code = (padding_b + 
-                        delta_time_b + 
-                        sync_counter_b + 
-                        battery_b + 
-                        function_code_b + 
-                        low_speed_ts_b + 
-                        button_timer_b +
-                        resync_counter_b)
-        
-        # Cifrado del código
-        hopping_code = encrypt(plain_hopping_code, key, sync_counter)
-        print(f"\nHopping code cifrado ({len(hopping_code)}b): {hopping_code}")  
-        
-        # Verificación CRC
-        auth_code_b = calculate_crc(serial_number_b + hopping_code)
-        
-        #Prints
-        print(f"\nSerial number({len(serial_number_b)}b): {serial_number_b}")
-        print(f"Delta time({len(delta_time_b)}b): {delta_time_b}")
-        print(f"Sync counter({len(sync_counter_b)}b): {sync_counter_b}")
-        print(f"Battery({len(battery_b)}b): {battery_b}")
-        print(f"Function code({len(function_code_b)}b): {function_code_b}")
-        print(f"Low speed timestamp({len(low_speed_ts_b)}b): {low_speed_ts_b}")
-        print(f"Button timer({len(button_timer_b)}b): {button_timer_b}")
-        print(f"Resync counter({len(resync_counter_b)}b): {resync_counter_b}")
-        print(f"Authorization code({len(auth_code_b)}b): {auth_code_b}")
-                 
-        # Construir el rolling code
-        rolling_code = (serial_number_b + hopping_code + auth_code_b)
-        print(f"\nTexto cifrado ({len(rolling_code)}b): {rolling_code}")   
-        
-        # Transformar el código en un array para poder ser enviado
         global rolling_code_v
-        rolling_code_v = [int(bit) for bit in rolling_code]         
-      
-        global signals_sent 
-        signals_sent = signals_sent + 1
-        sync_counter_b = to_bits(signals_sent, sync_counter_len)    
-
-
+        
+        with open("captura", "r") as file:
+            captura = file.read().strip()            
+        print("Se ha leido el código a enviar: " + captura)
+                
+        
+        # Se modifica la función para que abra las puertas
+        captura = captura[:92] + '0001' + captura[96:]
+        
+        # Se modifica el contador de pulsaciones para sincronizarlo
+        sinc = int(captura[60:84],2)
+        sinc = sinc + 1
+        sinc_b = to_bits(sinc, 24)
+        captura = captura[:60] + sinc_b + captura[84:]
+        
+        # Reelaboracion del CRC
+        auth_code_b = calculate_crc(captura[:160])
+        nueva_captura = captura[:160]+auth_code_b
+        print("Se ha reconstruido el CRC: ")
+            
+        rolling_code_v = [int(bit) for bit in nueva_captura]         
 
 def main(options=None):
     
