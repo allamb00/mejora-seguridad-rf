@@ -11,7 +11,6 @@ import hashlib
 
 from Crypto.Cipher import AES
 
-# Definir clave y IV fijos
 key = b'0123456789abcdef0123456789abcdef'  # 32 bytes para AES-256
 
 # Configura el socket UDP

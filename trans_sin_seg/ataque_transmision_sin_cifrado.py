@@ -15,17 +15,16 @@ from gnuradio import analog
 from gnuradio import blocks
 from gnuradio import filter
 from gnuradio import gr
-from gnuradio import network
 from gnuradio.fft import window
-
 import sys
 import signal
+from gnuradio import network
 import osmosdr
 import sip
 import argparse
+
 import crcmod
 import hashlib
-import time
 
 from Crypto.Cipher import AES
 
@@ -48,8 +47,7 @@ def to_bits(value, length=None):
     return bits
 
 """
-Estructura código UKeeloq
-AUTH KEY: 16 Bytes (lesser -> most significant Bytes)
+Estructura código
 
 FIJO (32b)
 32b - Serial Number: 	Número de serie que comparten cerradura y llave
@@ -63,7 +61,7 @@ HOPPING CODE (128b)
 16b - Button timer: 	Cuenta la duración de la pulsación del botón actual. Se resetea en cada pulsación. Resolución de 50ms. (264ms = 5)
 16b - Resync counter:	Cuenta el número de veces que el mando ha estado sin energía, por lo que el TS no va a estar sincronizado
 AUTHENTICATION (32b)
-32b - Authorization code: Genera un 'cifrado' AES del resto del código (fijo y hopping) y trunca los primeros 32 bits (lesser)
+32b - Authorization code: Genera un CRC del resto del código (fijo y hopping) y trunca los primeros 32 bits (lesser)
 
 """
 
@@ -354,24 +352,10 @@ def build_code(func):
         
         with open("captura", "r") as file:
             captura = file.read().strip()            
-        print("Se ha leido el código a enviar: " + captura)
-                
+        print("Se ha leido el código a enviar: " + captura)        
         
         # Se modifica la función para que abra las puertas
         captura = captura[:92] + '0001' + captura[96:]
-        
-        # Se modifica el tiempo para que sea el actual        
-        seconds, millis = divmod(time.time(),1)
-        timestamp = int(seconds)        
-        timestamp_len = 32
-        timestamp_bits = to_bits(timestamp, timestamp_len)        
-        captura = captura[:96] + timestamp_bits + captura[128:]
-        
-        # Se modifica el contador de pulsaciones para sincronizarlo
-        sinc = int(captura[60:84],2)
-        sinc = sinc + 1
-        sinc_b = to_bits(sinc, 24)
-        captura = captura[:60] + sinc_b + captura[84:]
         
         # Reelaboracion del CRC
         auth_code_b = calculate_crc(captura[:160])

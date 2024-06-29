@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+                       #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 #
@@ -51,8 +51,7 @@ def to_bits(value, length=None):
     return bits
 
 """
-Estructura código UKeeloq
-AUTH KEY: 16 Bytes (lesser -> most significant Bytes)
+Estructura código
 
 FIJO (32b)
 32b - Serial Number: 	Número de serie que comparten cerradura y llave
@@ -66,7 +65,7 @@ HOPPING CODE (128b)
 16b - Button timer: 	Cuenta la duración de la pulsación del botón actual. Se resetea en cada pulsación. Resolución de 50ms. (264ms = 5)
 16b - Resync counter:	Cuenta el número de veces que el mando ha estado sin energía, por lo que el TS no va a estar sincronizado
 AUTHENTICATION (32b)
-32b - Authorization code: Genera un 'cifrado' AES del resto del código (fijo y hopping) y trunca los primeros 32 bits (lesser)
+32b - Authorization code: Genera un CRC del resto del código (fijo y hopping) y trunca los primeros 32 bits (lesser)
 
 """
 
