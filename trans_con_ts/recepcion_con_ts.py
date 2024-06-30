@@ -7,9 +7,6 @@ This is a temporary script file.
 import socket
 import time
 import crcmod
-import hashlib
-
-from Crypto.Cipher import AES
 
 key = b'0123456789abcdef0123456789abcdef'  # 32 bytes para AES-256
 
@@ -137,36 +134,6 @@ def split_hopping_code_segments(code):
     resync_counter = code[112:128]
 
     return delta_time, sync_counter, battery, function_code, low_sp_ts, btn_timer, resync_counter
-
-# Función para obtener la clave
-def derive_key(seed):
-    seed_bytes = seed.to_bytes(16, byteorder='big')  # Convierte la seed a bytes
-    hash_obj = hashlib.sha256(seed_bytes).digest()  # Deriva un hash SHA-256
-    key = hash_obj[:16]  # Toma los primeros 16 bytes para la clave AES-128
-    iv = hash_obj[16:32]  # Toma los siguientes 16 bytes para el IV
-    return key, iv
-
-def decrypt(cipher_bits, key, iv):
-    if len(cipher_bits) != 128:
-        raise ValueError(f"La longitud del texto cifrado debe ser exactamente 128 bits ({len(cipher_bits)})")
-
-    if len(key) not in [16, 24, 32]:
-        raise ValueError(f"La clave debe tener una longitud de 16, 24 o 32 bytes ({len(key)})")
-
-    # Se asegura de que el iv cumple los 16 bytes
-    iv_bytes = iv.to_bytes(16, byteorder='big')
-    cipher = AES.new(key, AES.MODE_CBC, iv_bytes)
-
-    # Convierte la cadena de bits cifrados a bytes
-    cipher_bytes = int(cipher_bits, 2).to_bytes(16, byteorder='big')
-
-    # Descifra los datos
-    decrypted_data = cipher.decrypt(cipher_bytes)
-
-    # Convierte el texto descifrado a bits
-    decrypted_bits = ''.join(f'{byte:08b}' for byte in decrypted_data)
-    
-    return decrypted_bits
 
 def calculate_crc(data, polynomial=0x104C11DB7, init_value=0):
     # Convertir la cadena de bits en bytes

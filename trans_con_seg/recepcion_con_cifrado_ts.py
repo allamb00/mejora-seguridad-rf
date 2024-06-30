@@ -155,7 +155,7 @@ def decrypt(cipher_bits, key, iv):
 
     # Se asegura de que el iv cumple los 16 bytes
     iv_bytes = iv.to_bytes(16, byteorder='big')
-    cipher = AES.new(key, AES.MODE_CBC, iv_bytes)
+    cipher = AES.new(key, AES.MODE_GCM, iv_bytes)
 
     # Convierte la cadena de bits cifrados a bytes
     cipher_bytes = int(cipher_bits, 2).to_bytes(16, byteorder='big')

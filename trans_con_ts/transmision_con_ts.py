@@ -26,9 +26,6 @@ import argparse
 import time
 import random
 import crcmod
-import hashlib
-
-from Crypto.Cipher import AES
 
 from cryptography.hazmat.primitives import padding
 
@@ -355,42 +352,6 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.qtgui_sink_x_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.qtgui_sink_x_0_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.rtlsdr_source_0.set_center_freq(self.center_freq, 0)
-  
-
-# Función para obtener la clave
-def derive_key():
-    global sync_counter
-    seed_bytes = sync_counter.to_bytes(16, byteorder='big')  # Convierte la seed a bytes
-    hash_obj = hashlib.sha256(seed_bytes).digest()  # Deriva un hash SHA-256
-    key = hash_obj[:16]  # Toma los primeros 16 bytes para la clave AES-128
-    iv = hash_obj[16:32]  # Toma los siguientes 16 bytes para el IV
-    return key, iv
-
-def encrypt(bits, key, iv):
-    if len(bits) != 128:
-        raise ValueError(f"La longitud del texto plano debe ser exactamente 128 bits ({len(bits)})")
-
-    if len(key) not in [16, 24, 32]:
-        raise ValueError(f"La clave debe tener una longitud de 16, 24 o 32 bytes ({len(key)})")
-
-    # Se asegura de que el iv cumple los 16 bytes
-    iv_bytes = iv.to_bytes(16, byteorder='big')
-    cipher = AES.new(key, AES.MODE_CBC, iv_bytes)
-
-    # Convierte la cadena de bits a bytes
-    byte_data = int(bits, 2).to_bytes(16, byteorder='big')
-
-    # Cifra los datos
-    cipher_text = cipher.encrypt(byte_data)
-
-    # Asegúrate de que el texto cifrado tiene exactamente 16 bytes
-    if len(cipher_text) != 16:
-        raise ValueError("El texto cifrado no tiene la longitud esperada de 16 bytes")
-
-    # Convierte el texto cifrado a bits
-    cipher_bits = ''.join(f'{byte:08b}' for byte in cipher_text)
-    
-    return cipher_bits
 
 
 def calculate_crc(data, polynomial=0x104C11DB7, init_value=0):
