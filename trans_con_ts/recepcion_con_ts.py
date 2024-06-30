@@ -178,124 +178,124 @@ def is_sync_valid(sync_counter_keyfob_b, sync_counter = None):
         return True
     else:
         return False
-    
+
+def handle_received_data(data):
+    replaced = replace_control_bytes(data)
+    reduced = reduce_control_bits(replaced)
+    rolling_code = process_bits(reduced)  # Busca el preámbulo en la entrada
+
+    if rolling_code:
+        print(f"\nCodigo recibido ({len(rolling_code)}b): {rolling_code}\n")
+        process_rolling_code(rolling_code)
+
+def process_rolling_code(rolling_code):
+    # Separar el código en parte fija, dinámica y CRC32
+    fixed_code, hopping_code, crc_code = split_code_segments(rolling_code)
+    print(f'Parte fija: {fixed_code}')
+    print(f'Hopping code: {hopping_code}')
+    print(f'CRC-32: {crc_code}')
+
+    # Concatenar los bits y calcular el CRC
+    combined_code = fixed_code + hopping_code
+    computed_crc = calculate_crc(combined_code)
+
+    # Comparar con el CRC esperado
+    if computed_crc == crc_code:
+        print("CRC coincide. ", end='')
+        handle_valid_crc(hopping_code, rolling_code)
+    else:
+        print("CRC no coincide.\n" +
+              f"Esperado: {computed_crc}\n" +
+              f"Original: {crc_code}")
+    print("\nEscuchando...")
+
+def handle_valid_crc(hopping_code, rolling_code):
+    global sync_counter_local
+
+    # Se separa la parte dinámica en cada uno de sus campos
+    (delta_time, sync_counter, battery, function_code, low_sp_ts, btn_timer, resync_counter
+    ) = split_hopping_code_segments(hopping_code)
+
+    # Se comprueba si el código está sincronizado
+    if is_sync_valid(sync_counter):
+        handle_synchronized_code(delta_time, sync_counter, battery, function_code, low_sp_ts, btn_timer, resync_counter, rolling_code)
+    else:
+        handle_unsynchronized_code(hopping_code, rolling_code)
+
+def handle_synchronized_code(delta_time, sync_counter, battery, function_code, low_sp_ts, btn_timer, resync_counter, rolling_code):
+    global sync_counter_local
+
+    # Los dispositivos están sincronizados  
+    if is_timestamp_valid(low_sp_ts):
+        print("TS coincide.")
+        print("¡Código válido!\n")
+        print(f"delta_time: {delta_time}")
+        print(f"sync_counter: {sync_counter}")
+        print(f"battery: {battery}")
+        print(f"function_code: {function_code}")
+        print(f"low_sp_ts: {low_sp_ts}")
+        print(f"btn_timer: {btn_timer}")
+        print(f"resync_counter: {resync_counter}")
+
+        execute_function(function_code)
+
+        # Se apunta al siguiente código
+        sync_counter_local = sync_counter_local + 1
+
+        # Se guarda el valor del código capturado
+        save_captured_code(rolling_code)
+    else:
+        print("El código ha sido enviado fuera de tiempo.")
+        print("Se ignora el código")
+
+def handle_unsynchronized_code(hopping_code, rolling_code):
+    global sync_counter_local
+
+    # Los dispositivos NO están sincronizados
+    # Se comprueba si están en un rango admisible de sincronía
+    for i in range(10):
+        (delta_time, sync_counter, battery, function_code, low_sp_ts, btn_timer, resync_counter
+        ) = split_hopping_code_segments(hopping_code)
+        if is_sync_valid(sync_counter, i):
+            # El mando está ligeramente desfasado
+            # Se actualiza en local
+            sync_counter_local = int(sync_counter, 2) + 1
+            print("Mando desfasado")
+            print("Se ha resincronizado")
+            return
+
+    # El mando está demasiado desfasado
+    # Se ignora
+    print("Mando desfasado")
+    print("Se ignora el código")
+
+def execute_function(function_code):
+    function = int(function_code, 2)
+
+    if function == 1:
+        print('Apertura de puertas')
+    elif function == 2:
+        print('Bloqueo de puertas')
+    elif function == 3:
+        print('Apertura de maletero')
+    elif function == 4:
+        print('Encendido de motor')
+
+def save_captured_code(rolling_code):
+    with open("captura", "w") as file:
+        file.write(rolling_code)
 
 
 def main():
     # Bucle para recibir datos continuamente
     print("Escuchando...")
-    for a in range(0):
-        print(round(2/30))
+    
     try:
         while True:
             data, addr = sock.recvfrom(UDP_BUFFER_SIZE)  # Recibe datos del socket
-            replaced = replace_control_bytes(data)
-            reduced = reduce_control_bits(replaced)  
-            
-            rolling_code = 0
-            rolling_code = process_bits(reduced) # Busca el preámbulo en la entrada
-            if rolling_code:
-                print(f"\nCodigo recibido ({len(rolling_code)}b): {rolling_code}\n")  
-                # Separar el código en parte fija, dinámica y CRC32
-                fixed_code, hopping_code, crc_code = split_code_segments(rolling_code)
-                print(f'Parte fija: {fixed_code}')
-                print(f'Hopping code: {hopping_code}')
-                print(f'CRC-32: {crc_code}')
-                
-                # Concatenar los bits y calcular el CRC
-                combined_code = fixed_code + hopping_code
-                computed_crc = calculate_crc(combined_code)
-                
-                # Comparar con el CRC esperado
-                if computed_crc == crc_code:
-                    print("CRC coincide. ", end='')
-                    
-                    # Se descifra el código
-                    global sync_counter_local
-                    # Se separa la parte dinámica en cada uno de sus campos
-                    (delta_time, 
-                    sync_counter, 
-                    battery, 
-                    function_code, 
-                    low_sp_ts, 
-                    btn_timer, 
-                    resync_counter
-                    ) = split_hopping_code_segments(hopping_code)
-                    
-                    # Se comprueba si el código está sincronizado
-                    if is_sync_valid(sync_counter):
-                        # Los dispositivos están sincronizados  
-                        if is_timestamp_valid(low_sp_ts):
-                            
-                            print("TS coincide.")
-                            print("¡Código válido!\n")
-                            print(f"delta_time: {delta_time}")
-                            print(f"sync_counter: {sync_counter}")
-                            print(f"battery: {battery}")
-                            print(f"function_code: {function_code}")
-                            print(f"low_sp_ts: {low_sp_ts}")
-                            print(f"btn_timer: {btn_timer}")
-                            print(f"resync_counter: {resync_counter}")
-                            
-                            
-                            function = int(function_code, 2)
-                            
-                            if function == 1:
-                                print('Apertura de puertas')
-                            elif function == 2:
-                                print('Bloqueo de puertas')
-                            elif function == 3:
-                                print('Apertura de maletero')
-                            elif function == 4:
-                                print('Encendido de motor')
-                                
-                            # Se apunta al siguiente código
-                            sync_counter_local = sync_counter_local + 1
-                            
-                            # Se guarda el valor del código capturado                    
-                            with open("captura", "w") as file:
-                                file.write(rolling_code)
-                        else:
-                            print("El código ha sido enviado fuera de tiempo.")
-                            print("Se ignora el código")
-                    
-                    else:
-                        # Los dispositivos NO están sincronizados
-                        # Se comprueba si están en un rando admisible de sincronía
-                        i = sync_counter_local
-                        for i in range(10):  
-                            # hopping_code = decrypt(hopping_code, key, i)   
-                            (delta_time, 
-                            sync_counter, 
-                            battery, 
-                            function_code, 
-                            low_sp_ts, 
-                            btn_timer, 
-                            resync_counter
-                            ) = split_hopping_code_segments(hopping_code)
-                            if is_sync_valid(sync_counter, i):
-                                # El mando está ligeramente desfasado
-                                # Se actualiza en local
-                                sync_counter_local = int(sync_counter, 2) + 1
-                                print("Mando desfasado")
-                                print("Se ha resincronizado")
-                                
-                        # El mando está demasiado desfasado
-                        # Se ignora
-                        print("Mando desfasado")
-                        print("Se ignora el código")
-                    
-                else:
-                    print("CRC no coincide.\n" + 
-                          f"Esperado: {computed_crc}\n" +
-                          f"Original: {crc_code}")
-                
-                print("\nEscuchando...")
-            
+            handle_received_data(data)
     finally:
         sock.close()  # Cierra el socket al finalizar el script
         print("\nEjecución finalizada correctamente\n")
-        
-
 if __name__ == '__main__':
     main()
