@@ -220,7 +220,7 @@ def handle_valid_crc(hopping_code, rolling_code):
     if is_sync_valid(sync_counter):
         handle_synchronized_code(delta_time, sync_counter, battery, function_code, low_sp_ts, btn_timer, resync_counter, rolling_code)
     else:
-        handle_unsynchronized_code(hopping_code, rolling_code)
+        handle_unsynchronized_code(hopping_code)
 
 def handle_synchronized_code(delta_time, sync_counter, battery, function_code, low_sp_ts, btn_timer, resync_counter, rolling_code):
     global sync_counter_local
@@ -248,7 +248,7 @@ def handle_synchronized_code(delta_time, sync_counter, battery, function_code, l
         print("El código ha sido enviado fuera de tiempo.")
         print("Se ignora el código")
 
-def handle_unsynchronized_code(hopping_code, rolling_code):
+def handle_unsynchronized_code(hopping_code):
     global sync_counter_local
 
     # Los dispositivos NO están sincronizados
