@@ -36,6 +36,8 @@ sync_counter_local = 0
 
 #Configuración de la ventana de tiempo válida para la recepción
 window_seconds = 5
+#Configuración de la ventana de sincronía válida para la recepción
+sync_window = 10
 
 
 
@@ -286,7 +288,7 @@ def handle_unsynchronized_code(hopping_code):
 
     # Los dispositivos NO están sincronizados
     # Se comprueba si están en un rango admisible de sincronía
-    for i in range(10):
+    for i in range(sync_window):
         plain_hopping_code = decrypt(hopping_code, key, i)
         (delta_time, sync_counter, battery, function_code, low_sp_ts, btn_timer, resync_counter
         ) = split_hopping_code_segments(plain_hopping_code)
