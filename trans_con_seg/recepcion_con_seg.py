@@ -72,7 +72,7 @@ def reduce_control_bits(input_bits):
     count = 0
     for bit in input_bits:
         if bit != current_bit or count >= 30:
-            for i in range(round(count/30)): #Soluciona la inconsistencia de 0s y 1s
+            for _ in range(round(count/30)): #Soluciona la inconsistencia de 0s y 1s
                 output_bits += current_bit
             current_bit = bit
             count = 1
@@ -127,7 +127,7 @@ def split_hopping_code_segments(code):
     if len(code) != 128:
         raise ValueError(f"La longitud del texto cifrado debe ser exactamente 124 bits ({len(code)})")
 
-    padding = code[:4]
+    # padding = code[:4]
     delta_time = code[4:28]
     sync_counter = code[28:52]
     battery = code[52:60]
@@ -305,15 +305,15 @@ def handle_unsynchronized_code(hopping_code):
     print("Se ignora el código")
 
 def execute_function(function_code):
-    function = int(function_code, 2)
+    function_b = int(function_code, 2)
 
-    if function == 1:
+    if function_b == 1:
         print('Apertura de puertas')
-    elif function == 2:
+    elif function_b == 2:
         print('Bloqueo de puertas')
-    elif function == 4:
+    elif function_b == 4:
         print('Apertura de maletero')
-    elif function == 8:
+    elif function_b == 8:
         print('Encendido de motor')
 
 def save_captured_code(rolling_code):
@@ -325,7 +325,7 @@ def main():
     print("Escuchando...")
     try:
         while True:
-            data, addr = sock.recvfrom(UDP_BUFFER_SIZE)  # Recibe datos del socket
+            data, _ = sock.recvfrom(UDP_BUFFER_SIZE)  # Recibe datos del socket
             handle_received_data(data)
     finally:
         sock.close()  # Cierra el socket al finalizar el script

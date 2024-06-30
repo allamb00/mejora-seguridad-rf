@@ -68,7 +68,7 @@ def reduce_control_bits(input_bits):
     count = 0
     for bit in input_bits:
         if bit != current_bit or count >= 30:
-            for i in range(round(count/30)): #Soluciona la inconsistencia de 0s y 1s
+            for _ in range(round(count/30)): #Soluciona la inconsistencia de 0s y 1s
                 output_bits += current_bit
             current_bit = bit
             count = 1
@@ -123,7 +123,7 @@ def split_hopping_code_segments(code):
     if len(code) != 128:
         raise ValueError(f"La longitud del texto cifrado debe ser exactamente 124 bits ({len(code)})")
 
-    padding = code[:4]
+    # padding = code[:4]
     delta_time = code[4:28]
     sync_counter = code[28:52]
     battery = code[52:60]
@@ -254,7 +254,7 @@ def main():
     print("Escuchando...")
     try:
         while True:
-            data, addr = sock.recvfrom(UDP_BUFFER_SIZE)  # Recibe datos del socket
+            data, _ = sock.recvfrom(UDP_BUFFER_SIZE)  # Recibe datos del socket
             handle_received_data(data)
     finally:
         sock.close()  # Cierra el socket al finalizar el script

@@ -321,7 +321,7 @@ def build_code():
         captura = captura[:92] + '0001' + captura[96:]
         
         # Se modifica el tiempo para que sea el actual        
-        seconds, millis = divmod(time.time(),1)
+        seconds, _ = divmod(time.time(),1)
         timestamp = int(seconds)        
         timestamp_len = 32
         timestamp_bits = to_bits(timestamp, timestamp_len)        

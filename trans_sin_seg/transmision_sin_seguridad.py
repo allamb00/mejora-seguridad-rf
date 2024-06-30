@@ -97,7 +97,6 @@ delta_time_b = to_bits(delta_time, delta_time_len)
 last_sent_sgn_ts = 0
 
 #Sync counter
-#TODO contar las veces que se envían mensajes
 sync_counter = 0
 sync_counter_len = 24
 sync_counter_b = to_bits(sync_counter, sync_counter_len)
@@ -406,7 +405,7 @@ def build_code(func):
         #Low speed timestamp
         global time_res
         
-        seconds, millis = divmod(time.time(),1)
+        seconds, _ = divmod(time.time(),1)
         timestamp = int(seconds)        
         low_speed_ts_len = 32
         low_speed_ts_b = to_bits(timestamp, low_speed_ts_len)

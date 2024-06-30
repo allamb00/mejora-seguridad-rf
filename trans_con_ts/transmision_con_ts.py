@@ -412,7 +412,7 @@ def build_code(func):
         #Low speed timestamp
         global time_res
         
-        seconds, millis = divmod(time.time(),1)
+        seconds, _ = divmod(time.time(),1)
         timestamp = int(seconds)        
         low_speed_ts_len = 32
         low_speed_ts_b = to_bits(timestamp, low_speed_ts_len)
