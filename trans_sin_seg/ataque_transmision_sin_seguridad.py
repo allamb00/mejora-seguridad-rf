@@ -308,7 +308,7 @@ def calculate_crc(data, polynomial=0x104C11DB7, init_value=0):
     return crc_bits
 
 #Función para construir el código del envío desde el fichero almacenado
-def build_code(func):
+def build_code():
         global rolling_code_v
         
         with open("captura", "r") as file:
@@ -325,12 +325,9 @@ def build_code(func):
             
         rolling_code_v = [int(bit) for bit in nueva_captura]         
 
-def main(options=None):
+def main():
     
-    parser = argparse.ArgumentParser(description="Script de envío de códigos")
-    parser.add_argument('--func', type=str, help='Código de función: 1-2-3-4')
-    args = parser.parse_args()
-    build_code(args.func)
+    build_code()
     top_block_cls = Transmission
     
     qapp = Qt.QApplication(sys.argv)

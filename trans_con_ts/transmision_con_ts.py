@@ -465,7 +465,7 @@ def build_code(func):
 
 
 
-def main(options=None):
+def main():
     
     parser = argparse.ArgumentParser(description="Script de envío de códigos")
     parser.add_argument('--func', type=str, help='Código de función: 1-2-3-4')

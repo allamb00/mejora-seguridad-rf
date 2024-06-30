@@ -207,7 +207,7 @@ def is_sync_valid(sync_counter_keyfob_b, sync_counter = None):
         sync_counter = sync_counter_local
         
     # Comparar el contador local con el del mando
-    if sync_counter_local == sync_counter_keyfob:
+    if sync_counter == sync_counter_keyfob:
         return True
     else:
         return False
@@ -311,9 +311,9 @@ def execute_function(function_code):
         print('Apertura de puertas')
     elif function == 2:
         print('Bloqueo de puertas')
-    elif function == 3:
-        print('Apertura de maletero')
     elif function == 4:
+        print('Apertura de maletero')
+    elif function == 8:
         print('Encendido de motor')
 
 def save_captured_code(rolling_code):
