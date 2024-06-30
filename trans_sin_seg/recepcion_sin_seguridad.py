@@ -123,7 +123,6 @@ def split_hopping_code_segments(code):
     if len(code) != 128:
         raise ValueError(f"La longitud del texto cifrado debe ser exactamente 124 bits ({len(code)})")
 
-    # padding = code[:4]
     delta_time = code[4:28]
     sync_counter = code[28:52]
     battery = code[52:60]
