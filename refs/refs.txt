@@ -1,3 +1,0 @@
-https://wiki.gnuradio.org/index.php/CondaInstall
-https://github.com/cascades-sjtu/play_with_ask/tree/main
-https://wiki.gnuradio.org/index.php?title=Tutorials

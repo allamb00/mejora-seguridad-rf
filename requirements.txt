@@ -1,0 +1,6 @@
+crcmod==1.7
+cryptography==42.0.8
+pycryptodome==3.20.0
+PyQt5==5.15.10
+PyQt5_sip==12.12.2
+sip==6.7.12
