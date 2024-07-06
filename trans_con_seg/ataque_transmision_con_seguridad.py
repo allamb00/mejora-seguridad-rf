@@ -70,10 +70,19 @@ signals_sent = 0
 
 #Vector del rolling code para poder ser enviado
 rolling_code_v = 0
+iteration = 0
 
 class Transmission(gr.top_block, Qt.QWidget):
 
-    def __init__(self):
+    def __init__(self):        
+        # Primer envio de codigo
+        # Se saca la lectura de la captura de la construccion de codigo para ahorrar recursos
+        with open("captura", "r") as file:
+            captura = file.read().strip()            
+        print("Se ha leido el código a enviar: " + captura)      
+        fixed = captura[:32]
+        build_code(fixed)  # Se realiza la primera iteracion
+        
         gr.top_block.__init__(self, "Transmission", catch_exceptions=True)
         Qt.QWidget.__init__(self)
         self.setWindowTitle("Transmission")
@@ -163,7 +172,6 @@ class Transmission(gr.top_block, Qt.QWidget):
         styles = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         markers = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
 
-
         for i in range(1):
             if len(labels[i]) == 0:
                 self.qtgui_time_sink_x_0_0_0_0.set_line_label(i, "Data {0}".format(i))
@@ -226,7 +234,7 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.osmosdr_sink_0.set_antenna('', 0)
         self.osmosdr_sink_0.set_bandwidth(0, 0)
         self.network_udp_sink_0 = network.udp_sink(gr.sizeof_short, 1, '127.0.0.1', 2000, 0, 1472, False)
-        self.blocks_vector_source_x_0 = blocks.vector_source_c(rolling_code_v, False, 1, [])
+        self.blocks_vector_source_x_0 = blocks.vector_source_c(rolling_code_v, True, 1, [])
         self.blocks_throttle2_0 = blocks.throttle( gr.sizeof_gr_complex*1, samp_rate, True, 0 if "auto" == "auto" else max( int(float(0.1) * samp_rate) if "auto" == "time" else int(0.1), 1) )
         self.blocks_threshold_ff_0 = blocks.threshold_ff(0.025, 0.075, 0)
         self.blocks_repeat_0 = blocks.repeat(gr.sizeof_gr_complex*1, 600)
@@ -239,9 +247,13 @@ class Transmission(gr.top_block, Qt.QWidget):
         	audio_stop=100e3,
         )
 
+
         ##################################################
         # Connections
         ##################################################
+        
+        self.connect((self.blocks_vector_source_x_0, 0), (self.blocks_repeat_0, 0))
+        
         self.connect((self.analog_am_demod_cf_0, 0), (self.rational_resampler_xxx_0, 0))
         self.connect((self.blocks_add_const_vxx_0, 0), (self.blocks_threshold_ff_0, 0))
         self.connect((self.blocks_float_to_short_0, 0), (self.network_udp_sink_0, 0))
@@ -251,7 +263,6 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.connect((self.blocks_threshold_ff_0, 0), (self.qtgui_time_sink_x_0_0_0_0, 0))
         self.connect((self.blocks_throttle2_0, 0), (self.analog_am_demod_cf_0, 0))
         self.connect((self.blocks_throttle2_0, 0), (self.qtgui_sink_x_0_0_0, 0))
-        self.connect((self.blocks_vector_source_x_0, 0), (self.blocks_repeat_0, 0))
         self.connect((self.rational_resampler_xxx_0, 0), (self.blocks_add_const_vxx_0, 0))
         self.connect((self.rtlsdr_source_0, 0), (self.blocks_throttle2_0, 0))
 
@@ -290,6 +301,31 @@ class Transmission(gr.top_block, Qt.QWidget):
         self.qtgui_sink_x_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.qtgui_sink_x_0_0_0.set_frequency_range(self.center_freq, self.samp_rate)
         self.rtlsdr_source_0.set_center_freq(self.center_freq, 0)
+        
+    def update_vector_source(self, rolling_code_v):
+        # Desconectar todas las conexiones relacionadas
+        try:
+            self.disconnect_all()
+        except:
+            pass
+    
+        # Se recrean los bloques
+        self.blocks_vector_source_x_0 = blocks.vector_source_c(rolling_code_v, True, 1, [])
+        self.blocks_repeat_0 = blocks.repeat(gr.sizeof_gr_complex*1, 600)
+    
+        # Se reconectan los bloques
+        self.connect((self.blocks_vector_source_x_0, 0), (self.blocks_repeat_0, 0))
+        self.connect((self.blocks_repeat_0, 0), (self.osmosdr_sink_0, 0))
+        self.connect((self.blocks_repeat_0, 0), (self.qtgui_sink_x_0_0, 0))
+    def disconnect_all(self):
+        if hasattr(self, 'blocks_vector_source_x_0'):
+            self.disconnect((self.blocks_vector_source_x_0, 0), (self.blocks_repeat_0, 0))
+    
+        if hasattr(self, 'blocks_repeat_0'):
+            self.disconnect((self.blocks_repeat_0, 0), (self.osmosdr_sink_0, 0))
+            self.disconnect((self.blocks_repeat_0, 0), (self.qtgui_sink_x_0_0, 0))
+
+
 
 
 def calculate_crc(data, polynomial=0x104C11DB7, init_value=0):
@@ -307,47 +343,58 @@ def calculate_crc(data, polynomial=0x104C11DB7, init_value=0):
 
     return crc_bits
 
-#Función para construir el código del envío desde el fichero almacenado
-def build_code():
+# Función para construir el código del envío desde el fichero almacenado
+def build_code(fixed):
         global rolling_code_v
+        global iteration
         
-        with open("captura", "r") as file:
-            captura = file.read().strip()            
-        print("Se ha leido el código a enviar: " + captura)        
-        
-        # Se modifica la función para que abra las puertas
-        captura = captura[:92] + '0001' + captura[96:]
+        hopping = format(iteration, f'0{128}b')
+        iteration = iteration + 1
         
         # Reelaboracion del CRC
-        auth_code_b = calculate_crc(captura[:160])
-        nueva_captura = captura[:160]+auth_code_b
-        print("Se ha reconstruido el CRC: ")
+        crc = calculate_crc(fixed + hopping) 
+        nuevo_codigo = fixed + hopping + crc 
+        print("nuevo codigo:" + hopping)
             
-        rolling_code_v = [int(bit) for bit in nueva_captura]         
+        rolling_code_v = [int(bit) for bit in nuevo_codigo]  
+        
+        percentage = format((iteration/2**128)*100, '.10f')
+        print(f'{percentage}% - {iteration} códigos enviados')
+        
+def main():    
+    # Se saca la lectura de la captura para ahorrar recursos
+    with open("captura", "r") as file:
+        captura = file.read().strip()            
+    print("Se ha leido el código a enviar: " + captura)      
+    fixed = captura[:32]
 
-def main():
-    
-    build_code()
     top_block_cls = Transmission
-    
+
     qapp = Qt.QApplication(sys.argv)
     tb = top_block_cls()
     tb.start()
-    tb.show()
-    
+    tb.show()    
+
+    def update_vector():
+        global rolling_code_v
+        build_code(fixed)  # Generar un nuevo vector
+        tb.update_vector_source(rolling_code_v)  # Se envia el vector
+
     def sig_handler(sig=None, frame=None):
         tb.stop()
         tb.wait()
         Qt.QApplication.quit()
-        
+
     signal.signal(signal.SIGINT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
-    # Crear un QTimer para parar el programa después de 2 segundos
+
+    # Mediante QTimer, se actualiza el vector a enviar
     timer = Qt.QTimer()
-    timer.timeout.connect(sig_handler)  # Llama a sig_handler después del timeout
-    timer.start(2000)  
-    
+    timer.timeout.connect(update_vector)
+    timer.start(1000)
+
     qapp.exec_()
+        
 
 if __name__ == '__main__':
     main()
