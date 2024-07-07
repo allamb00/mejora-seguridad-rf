@@ -21,10 +21,8 @@ import signal
 from gnuradio import network
 import osmosdr
 import sip
-import argparse
 
 import crcmod
-import hashlib
 
 
 
@@ -310,8 +308,7 @@ class Transmission(gr.top_block, Qt.QWidget):
             pass
     
         # Se recrean los bloques
-        self.blocks_vector_source_x_0 = blocks.vector_source_c(rolling_code_v, True, 1, [])
-        self.blocks_repeat_0 = blocks.repeat(gr.sizeof_gr_complex*1, 600)
+        self.blocks_vector_source_x_0.set_data(rolling_code_v)
     
         # Se reconectan los bloques
         self.connect((self.blocks_vector_source_x_0, 0), (self.blocks_repeat_0, 0))
@@ -324,9 +321,6 @@ class Transmission(gr.top_block, Qt.QWidget):
         if hasattr(self, 'blocks_repeat_0'):
             self.disconnect((self.blocks_repeat_0, 0), (self.osmosdr_sink_0, 0))
             self.disconnect((self.blocks_repeat_0, 0), (self.qtgui_sink_x_0_0, 0))
-
-
-
 
 def calculate_crc(data, polynomial=0x104C11DB7, init_value=0):
     # Convertir la cadena de bits en bytes
@@ -354,7 +348,7 @@ def build_code(fixed):
         # Reelaboracion del CRC
         crc = calculate_crc(fixed + hopping) 
         nuevo_codigo = fixed + hopping + crc 
-        print("nuevo codigo:" + hopping)
+        print("Hopping code:" + hopping)
             
         rolling_code_v = [int(bit) for bit in nuevo_codigo]  
         
@@ -391,7 +385,7 @@ def main():
     # Mediante QTimer, se actualiza el vector a enviar
     timer = Qt.QTimer()
     timer.timeout.connect(update_vector)
-    timer.start(1000)
+    timer.start(100)
 
     qapp.exec_()
         
