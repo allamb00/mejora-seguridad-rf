@@ -347,10 +347,10 @@ def build_code(fixed):
         
         # Reelaboracion del CRC
         crc = calculate_crc(fixed + hopping) 
-        nuevo_codigo = fixed + hopping + crc 
+        new_code = fixed + hopping + crc 
         print("Hopping code:" + hopping)
             
-        rolling_code_v = [int(bit) for bit in nuevo_codigo]  
+        rolling_code_v = [int(bit) for bit in new_code]  
         
         percentage = format((iteration/2**128)*100, '.10f')
         print(f'{percentage}% - {iteration} códigos enviados')
